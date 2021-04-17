@@ -1,0 +1,22 @@
+###########################################
+# Syntax Coloring Map For FD560CA library
+###########################################
+
+###########################################
+# Datatypes (KEYWORD1)
+###########################################
+
+DHT	KEYWORD1
+
+###########################################
+# Methods and Functions (KEYWORD2)
+###########################################
+
+begin	KEYWORD2
+clean	KEYWORD2
+allOn_bri	KEYWORD2
+shownum	KEYWORD2
+holenum	KEYWORD2
+get_key	KEYWORD2
+
+
