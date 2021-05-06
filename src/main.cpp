@@ -377,7 +377,7 @@ void update_data()
   limit_dn = custom.TMPLO;
 }
 
-void di()
+void SevenSegmentdisplay()
 {
   int ee = hum;
   green.shownum(2, ee / 10 % 10, 0);
@@ -1034,7 +1034,7 @@ void loop()
 
   display();
 
-  di();
+  SevenSegmentdisplay();
 
   limit_warning();
 
