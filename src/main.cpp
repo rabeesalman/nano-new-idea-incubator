@@ -1,20 +1,23 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <EEPROM.h>
-#include <LiquidCrystal.h>
 #include <FD650CA.h>
 #include <I2C.h>
+#include <LiquidCrystal_Software_I2C.h>
+#include <SHT31RAB.h>
+SHT31RAB sht31(3, 4);
+LiquidCrystal_I2C lcd(0x27, 16, 2, 5, 6); // Set the LCD address to 0x27 for a 16 chars and 2 line display
+I2C DS3231(8, 9);
 //pinout...
-//rs =7,en=6,d4=5,d5=4,d6=3,d7=2,red8,9;green11,10;heater 12,motor 13,buz A2,DHT22_data_pin A3
+//lcdi2c 5,6  red8,9;green11,10;heater 12,motor 13,buz A2,DHT22_data_pin A3
 FD650CA red(8, 9);
 FD650CA green(11, 10);
-const int rs = 7, en = 6, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
-LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 //**********************
 #define heater 12
 #define motor 13
 #define buz A2
 #define DHT22_data_pin A3
+#define SHT31_ADD 0x44
 double heat_factor = 5.0;
 double tmp_up;
 double tmp_dwn;
@@ -22,15 +25,18 @@ float hum = 10.0;
 double area;
 bool st = 1, flag = 0;
 unsigned long previousMillis1 = 0.0;
-unsigned long tick = 0.0;
+unsigned long tick = 0;
 unsigned int cnt = 0, seconds = 0, minuts = 0;
 // double Sum = 0.0;
 bool lc1 = 0, lc2 = 0;
-// unsigned long mil = 0;
+/////////////////////////
+uint8_t New_Time = 0;
+uint8_t minut_now = 0;
+//
 bool sw = 0;
-unsigned int cycle_time = 120;
+unsigned int cycle_time = 50;
 float turning_time = 8.0;
-bool _enable = 1;
+bool _enableRotate = 1;
 uint8_t count = 0;
 uint8_t counter = 0;
 bool stable = 0;
@@ -47,6 +53,7 @@ bool b = 0;
 float factor = 0.0;
 double x2;
 bool t = 0;
+bool keystat = 0;
 //*****************************from arduino to esp
 bool lamp = false;
 bool fan = true, water = true, door = false, eg = false;
@@ -59,6 +66,14 @@ int eeAddress = 0;
 bool save_signal = 0;
 unsigned long sig = 0;
 bool pm = 0;
+uint8_t hourTosec = 0;
+unsigned long turnTimeCounter = 0;
+bool corrector = 0;
+uint8_t totalNumberof_turning = 0;
+unsigned long time_elapsed = 0;
+unsigned long nextTime;
+int SEC = 0, MIN = 0, HOR = 0;
+
 struct data_tobe_send
 {
   float TEMP;
@@ -116,7 +131,6 @@ epromsaved data_to_save = {0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 #define DAY_IN_MONTH 4
 #define MONTH_IN_YEAR 5
 #define YEAR 6
-I2C DS3231(8, 9);
 
 struct main
 {
@@ -129,6 +143,8 @@ struct main
   uint16_t year;
 } RTC;
 
+uint8_t periods[15] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; //[0]seconds,[1]minuts,[2]hours{instance of time now}
+
 uint8_t dectobcd(const uint8_t val)
 {
   return ((val / 10 * 16) + (val % 10));
@@ -137,6 +153,11 @@ uint8_t dectobcd(const uint8_t val)
 uint8_t bcdtodec(const uint8_t val)
 {
   return ((val / 16 * 10) + (val % 16));
+}
+
+void zeroticks()
+{
+  tick = millis();
 }
 
 void rtcRead()
@@ -201,9 +222,95 @@ void rtcWrite(uint8_t S, uint8_t M, uint8_t H, bool _12_, bool pm, uint8_t dinwe
   DS3231.write(DS3231_ADD, YEAR, dectobcd(yer));
 }
 
+void start_motor()
+{
+  if (millis() > (turning_time * 3000)) ///to prevent turning after reset arduino (turning_time=8sec)
+  {
+    if (millis() - turnTimeCounter < (turning_time * 1000))
+    {
+      digitalWrite(motor, 1);
+    }
+    else
+    {
+      corrector = 0;
+      digitalWrite(motor, 0);
+    }
+  }
+}
+
+void Cycle()
+{
+  if (custom.TURN)
+  {
+    //**************Finding the next time period cycle
+    // for (uint8_t i = 3; i < (24 / custom.PERIOD) + 3; i++)
+    // {
+
+    //   unsigned int fm = periods[0] + (periods[i] * 60) - RTC.minuts * 60 - RTC.second;
+
+    //   if (fm >= 0 && fm < (custom.PERIOD * 60))
+    //   {
+    //     time_elapsed = periods[i] * 60 + periods[0] - RTC.minuts * 60 - RTC.second;
+    //   }
+    //   else
+    //   {
+    //     i++;
+    //   }
+
+    // }
+    //********************************************************generic time
+      SEC = periods[0], MIN = periods[1], HOR = periods[3];
+
+      // if (periods[i] - periods[i - 1] < 0)
+      // {
+      //   HOR += 24;
+
+        if (HOR - RTC.hours <= (custom.PERIOD))
+        {
+          HOR = HOR - RTC.hours;
+        }
+      // }
+      if (MIN - RTC.minuts < 0)
+      {
+        MIN = MIN + 60;
+
+        // HOR++;
+      }
+      if (SEC - RTC.second < 0)
+      {
+        SEC = SEC + 60;
+
+        // MIN++;
+      }
+      else
+      {
+        SEC = SEC - RTC.second;
+        MIN = MIN - RTC.minuts;
+        HOR = periods[3] - RTC.hours;
+      }
+    
+    ///****************************
+    if (RTC.second == periods[0] && RTC.minuts == periods[1] && !corrector)
+    {
+      for (uint8_t i = 3; i < (24 / custom.PERIOD) + 3; i++)
+      {
+        if (RTC.hours == periods[i])
+        {
+          turnTimeCounter = millis();
+          corrector = 1;
+        }
+      }
+    }
+  }
+  else
+  {
+    digitalWrite(motor, 0);
+  }
+}
+
 void saving_data()
 {
-  if (!Wire.available() && millis() - sig >= 5000 && save_signal)
+  if ((!Wire.available()) && (millis() - sig >= 5000) && (save_signal))
   {
     sig = millis();
     save_signal = 0;
@@ -213,7 +320,70 @@ void saving_data()
     EEPROM.put(eeAddress, data_to_save);
     eeAddress = sizeof(float);
     EEPROM.get(eeAddress, custom);
-    // counter++;
+    /////////////////
+    for (uint8_t i = 0; i < sizeof(periods); i++)
+    {
+      periods[i] = 0;
+    }
+    periods[0] = RTC.second;
+    periods[1] = RTC.minuts;
+    periods[2] = RTC.hours;
+    for (uint8_t i = 3; i < (24 / custom.PERIOD) + 3; i++)
+    {
+      periods[i] = periods[i - 1] + custom.PERIOD;
+      if (periods[i] > 23)
+      {
+        periods[i] = periods[i] - 24;
+      }
+    }
+
+    //**********for test in minuts !!!!!!***
+    // periods[0] = RTC.second;
+    // periods[1] = RTC.hours;
+    // periods[2] = RTC.minuts;
+    // totalNumberof_turning = 24 / custom.PERIOD;
+    // for (uint8_t i = 3; i < (24 / custom.PERIOD) + 3; i++)
+    // {
+    //   periods[i] = periods[i - 1] + custom.PERIOD;
+    //   if (periods[i] > 59)
+    //   {
+    //     periods[i] = periods[i] - 60;
+    //   }
+    // }
+    //******
+    eeAddress = sizeof(float) + sizeof(data_to_save);
+    EEPROM.put(eeAddress, periods);
+    EEPROM.get(eeAddress, periods);
+    for (uint8_t i = 0; i < sizeof(periods); i++)
+    {
+      Serial.print(periods[i]);
+      Serial.print(" | ");
+    }
+    Serial.println("");
+
+    // float *p1;
+    // // take address of custom and assign to the pointer
+    // p1 = (float *)&custom;
+    // // loop thorugh the elements of the struct
+    // for (uint8_t cnt = 0; cnt < 3; cnt++)
+    // {
+    //   // p points to an address of an element in the array; *p gets you the value ofthat address
+    //   // print it and next point the pointer to the address of the next element
+    //   Serial.print(*(p1++));
+    //   Serial.print(" | ");
+    // }
+    // uint8_t *p;
+    // // take address of custom and assign to the pointer
+    // p = (uint8_t *)&custom;
+    // p += 12;
+    // // p++;
+
+    // for (uint8_t cnt = 10; cnt < sizeof(custom) / sizeof(uint8_t); cnt++)
+    // {
+    //   Serial.print(*(p++));
+    //   Serial.print(" | ");
+    // }
+    // Serial.println("  ");
   }
 }
 
@@ -229,7 +399,6 @@ void on_Request() ///on Request do this
     break;
 
   case 's':
-
     // Wire.write((byte *)(&custom), sizeof(custom));
     break;
   default:
@@ -260,19 +429,19 @@ void receiveEvent(int howMany)
     data_to_save.SETTMP = g[0];
     data_to_save.TMPHI = g[1];
     data_to_save.TMPLO = g[2];
-    data_to_save.PERIOD = toascii(arryx[18]); //IN HOURS
-    data_to_save.HHI = toascii(arryx[16]);
-    data_to_save.HLO = toascii(arryx[17]);
-    data_to_save.HACHIN = toascii(arryx[19]);
-    data_to_save.TURN = toascii(arryx[20]);
+    data_to_save.HHI = char(arryx[16]);
+    data_to_save.HLO = char(arryx[17]);
+    data_to_save.PERIOD = char(arryx[18]); //IN HOURS
+    data_to_save.HACHIN = char(arryx[19]);
+    data_to_save.TURN = char(arryx[20]);
 
     ///////////////////////////////////////
-    data_to_save.YEAR1 = toascii(arryx[21]);
-    data_to_save.MONTH1 = toascii(arryx[22]);
-    data_to_save.DAY1 = toascii(arryx[23]);
-    data_to_save.HOUR1 = toascii(arryx[24]);
-    data_to_save.MINUT1 = toascii(arryx[25]);
-    if (toascii(arryx[24]) > 12)
+    data_to_save.YEAR1 = char(arryx[21]);
+    data_to_save.MONTH1 = char(arryx[22]);
+    data_to_save.DAY1 = char(arryx[23]);
+    data_to_save.HOUR1 = char(arryx[24]);
+    data_to_save.MINUT1 = char(arryx[25]);
+    if (char(arryx[24]) > 12)
     {
       pm = 1;
     }
@@ -280,6 +449,12 @@ void receiveEvent(int howMany)
     {
       pm = 0;
     }
+    // for (uint16_t i = 0; i < sizeof(arryx); i++)
+    // {
+    //   Serial.print(toascii(arryx[i]));
+    //   Serial.print(" | ");
+    // }
+    // Serial.println("");
     // rtcWrite(30, toascii(arryx[25]), toascii(arryx[24]), 0, pm, 2, toascii(arryx[23]), toascii(arryx[22]), toascii(arryx[21]) + 2000);
     // 2021-03-26T20:47
 
@@ -307,54 +482,61 @@ double stien_three(byte Thermistor_Pin, float Rdivid, float A, float B, float C)
 
 void humidity()
 {
-  while (hum_trig == 2)
+  while (hum_trig == 1)
   {
-    pinMode(DHT22_data_pin, OUTPUT);
-    digitalWrite(DHT22_data_pin, LOW);
-    delay(18);
-    digitalWrite(DHT22_data_pin, HIGH);
-    pinMode(DHT22_data_pin, INPUT_PULLUP);
-    for (uint8_t i = 0; i <= 40; i++)
-    {
-      result[i] = (pulseIn(DHT22_data_pin, HIGH) > 45);
-    }
+    // pinMode(DHT22_data_pin, OUTPUT);
+    // digitalWrite(DHT22_data_pin, LOW);
+    // delay(18);
+    // digitalWrite(DHT22_data_pin, HIGH);
+    // pinMode(DHT22_data_pin, INPUT_PULLUP);
+    // for (uint8_t i = 0; i <= 40; i++)
+    // {
+    //   result[i] = (pulseIn(DHT22_data_pin, HIGH) > 45);
+    // }
 
-    for (uint8_t j = 0; j < 5; j++)
-    {
-      databytes[j] = 0;
+    // for (uint8_t j = 0; j < 5; j++)
+    // {
+    //   databytes[j] = 0;
 
-      for (uint8_t i = 1; i <= 8; i++)
-      {
-        databytes[j] = databytes[j] << 1;
-        if (result[j * 8 + i])
-          databytes[j] |= 1;
-      }
-    }
-    m_temp = ((databytes[2] & 0x7F) * 256 + databytes[3]) / (float)10; //Extract Temperature
-    if ((databytes[2] & 0x80) > 0)
-    {
-      m_temp = -m_temp; //MSB of Temperature gives it sign
-    }
-    m_temp = m_temp * 1.023;
-    hum = (databytes[0] * 256 + databytes[1]) / (float)10; //Extract Humidity
-    hum *= 100.0;
+    //   for (uint8_t i = 1; i <= 8; i++)
+    //   {
+    //     databytes[j] = databytes[j] << 1;
+    //     if (result[j * 8 + i])
+    //       databytes[j] |= 1;
+    //   }
+    // }
+    // m_temp = ((databytes[2] & 0x7F) * 256 + databytes[3]) / (float)10; //Extract Temperature
+    // if ((databytes[2] & 0x80) > 0)
+    // {
+    //   m_temp = -m_temp; //MSB of Temperature gives it sign
+    // }
+    // m_temp = m_temp * 1.023;
+    // hum = (databytes[0] * 256 + databytes[1]) / (float)10; //Extract Humidity
+    // hum *= 100.0;
+    //**********************************
+    sht31.read(SHT31_ADD, 0x2220);
+    m_temp = sht31.tempResult;
+    hum = sht31.humidityResult;
+    area = custom.SETTMP - m_temp;
+    //*************************************
     hum_trig = 0;
   }
 }
 
 void update_data()
 {
-  tmp_dwn = stien_three(A0, 10000.0, 9.2842025712E-04, 2.4620685389E-04, 1.9112690439E-07) + 0.08; //9965.0 ///Black wire.Steel old (ok)
+
+  // tmp_dwn = stien_three(A0, 10000.0, 9.2842025712E-04, 2.4620685389E-04, 1.9112690439E-07) + 0.08; //9965.0 ///Black wire.Steel old (ok)
   //*************************************************************************************************
   // tmp_dwn = stien_three(A0, 10000.0,1.776109629E-03,1.273236472E-04,5.098492533E-07); ///Gray wire on green segment (ok)
   // tmp_up = stien_three(A1, 10000.0, 7.8786994030E-04, 2.8985556847E-04, -1.3697290359E-07); // Black wire epoxy 10k small baghdad
   // tmp_up = stien_three(A1, 10000.0, 1.3411013609E-03, 1.7326863945E-04, 5.1373528749E-07); ////white wire epoxy 10k baghdad (ok)
   tmp_up = stien_three(A1, 10000.0, 1.286986010E-03, 2.067415798E-04, 1.923761216E-07); ///first one epoxy 1500 dinar ok
-  area = custom.SETTMP - tmp_dwn;
-
-  data.TEMP = float(tmp_dwn);
+  // area = custom.SETTMP - tmp_dwn;
+  // data.TEMP = float(tmp_dwn);
+  data.TEMP = m_temp;
+  data.HUMI = int(hum);
   data.year = RTC.year;
-  data.HUMI = hum / 100;
   // data.COUNTER = RTC.second;
   data.second = RTC.second;
   data.DAYS = RTC.day_inmonth;
@@ -379,10 +561,9 @@ void update_data()
 
 void SevenSegmentdisplay()
 {
-  int ee = hum;
-  green.shownum(2, ee / 10 % 10, 0);
-  green.shownum(1, ee / 100 % 10, 1);
-  green.shownum(0, ee / 1000 % 10, 0);
+  green.shownum(2, int(hum * 100) / 10 % 10, 0);
+  green.shownum(1, int(hum * 100) / 100 % 10, 1);
+  green.shownum(0, int(hum * 100) / 1000 % 10, 0);
 
   red.shownum(2, int(m_temp * 100) / 10 % 10, 0);
   red.shownum(1, int(m_temp * 100) / 100 % 10, 1);
@@ -451,7 +632,7 @@ void limit_warning()
 
       while ((red.get_key() == 0x47) && (millis() - tick > 150))
       {
-        tick = millis();
+        zeroticks();
         stable = 0;
         lcd.clear();
         x = 0;
@@ -462,15 +643,15 @@ void limit_warning()
 
 void manual_turn()
 {
-  tick = millis();
+  zeroticks();
   while ((red.get_key() == 0x5f) && !lc2) ///left key=5f
   {
     if ((millis() - tick > 100))
     {
-      tick = millis();
+      zeroticks();
       lcd.clear();
       alarm(1);
-      _enable = 0;
+      _enableRotate = 0;
       lc2 = 1;
     }
   }
@@ -482,19 +663,19 @@ void manual_turn()
     lcd.print("Press Down V");
     while ((red.get_key() == 0x57) && (millis() - tick > 50)) ////down key =57 pressed
     {
-      tick = millis();
+      zeroticks();
       digitalWrite(motor, 1);
     }
     while ((red.get_key() == 0x17) && (millis() - tick > 50)) ////down key =17 relesed
     {
-      tick = millis();
+      zeroticks();
       digitalWrite(motor, 0);
     }
 
     while ((red.get_key() == 0x5f) && (millis() - tick > 100))
     {
-      // tick = millis();
-      _enable = 1;
+      // zeroticks();
+      _enableRotate = 1;
       lc2 = 0;
       digitalWrite(motor, 0);
       alarm(1);
@@ -541,30 +722,6 @@ void turning_tone()
   }
 }
 
-void auto_turn()
-{
-  unsigned int _cycle_time = cycle_time * 60;
-
-  if (_enable)
-  {
-    if (seconds < _cycle_time) //5 minuts
-    {
-      digitalWrite(motor, 0);
-    }
-    if (seconds >= _cycle_time)
-    {
-      digitalWrite(motor, 1);
-    }
-    if (seconds > (_cycle_time) + (turning_time))
-    {
-      digitalWrite(motor, 0);
-      seconds = 0;
-      b = 1;
-      lcd.clear();
-    }
-  }
-}
-
 void display()
 {
   if (!sw)
@@ -591,17 +748,21 @@ void display()
     }
     lcd.setCursor(0, 1);
     lcd.print("BN=");
-    if (tmp_dwn <= -20)
+    if (m_temp <= -10)
     {
       lcd.print("OPEN");
     }
     else
-      lcd.print(tmp_dwn);
-    lcd.print("/");
-    lcd.print("SP:");
-    lcd.print(custom.SETTMP);
-    // lcd.print("A:");
-    // lcd.print((area * 2000.0 + (1000.0)) / 1000);
+      lcd.print(m_temp);
+    lcd.print(HOR);
+    lcd.print(":");
+    lcd.print(MIN);
+    lcd.print(":");
+    lcd.print(SEC);
+    // lcd.print("SP:");
+    // lcd.print(custom.SETTMP);
+    // lcd.print(time_elapsed);
+    // lcd.print("/");
   }
 }
 
@@ -609,7 +770,7 @@ void while_(uint8_t x)
 {
   while ((red.get_key() == 0x4f) && (millis() - tick > 200))
   {
-    tick = millis();
+    zeroticks();
     lcd.clear();
     count = x;
     alarm(1);
@@ -629,6 +790,7 @@ void sub_disp()
 
 void manu1() ////for setting set point
 {
+  zeroticks(); ////optional
   sub_disp();
 
   bool a = 0;
@@ -641,7 +803,7 @@ void manu1() ////for setting set point
       if ((millis() - tick < 1000))
       {
         a = 0;
-        tick = millis();
+        zeroticks();
       }
       while (a && (red.get_key() == 0x47))
       {
@@ -655,7 +817,7 @@ void manu1() ////for setting set point
         if ((red.get_key() == 0x07))
         {
           a = 0;
-          tick = millis();
+          zeroticks();
         }
       }
       while (!a && (red.get_key() == 0x47))
@@ -678,7 +840,7 @@ void manu1() ////for setting set point
         if ((red.get_key() == 0x07))
         {
           a = 0;
-          tick = millis();
+          zeroticks();
         }
       }
     }
@@ -703,7 +865,7 @@ void manu1() ////for setting set point
         if ((red.get_key() == 0x17))
         {
           a = 0;
-          tick = millis();
+          zeroticks();
         }
       }
       while (!a && (red.get_key() == 0x57))
@@ -724,7 +886,7 @@ void manu1() ////for setting set point
         if ((red.get_key() == 0x17))
         {
           a = 0;
-          tick = millis();
+          zeroticks();
         }
       }
     }
@@ -738,7 +900,7 @@ void manu2() ////for setting set point
   {
     while ((red.get_key() == 0x47) && (millis() - tick > 150))
     {
-      tick = millis();
+      zeroticks();
       cycle_time++;
       while (cycle_time > 360)
       {
@@ -747,7 +909,7 @@ void manu2() ////for setting set point
     }
     while ((red.get_key() == 0x57) && (millis() - tick > 150))
     {
-      tick = millis();
+      zeroticks();
       cycle_time--;
       while (cycle_time < 1)
       {
@@ -770,7 +932,7 @@ void manu3() ////for setting set point
   {
     while ((red.get_key() == 0x47) && (millis() - tick > 150))
     {
-      tick = millis();
+      zeroticks();
       turning_time += 0.25;
       while (turning_time > 9.0)
       {
@@ -779,7 +941,7 @@ void manu3() ////for setting set point
     }
     while ((red.get_key() == 0x57) && (millis() - tick > 150))
     {
-      tick = millis();
+      zeroticks();
       turning_time -= 0.25;
       while (turning_time < 4.0)
       {
@@ -890,13 +1052,16 @@ void save_func()
 //   lcd.print("  ");
 //   while ((red.get_key() == 0x5f) && !lc2 && (millis() - tick > 200)) ///left key=5f
 //   {
-//     tick = millis();
+//     zeroticks();
 //     delay(1500);
 //   }
 // }
 
 void setup()
 {
+  rtcWrite(0, 56, 7, 0, 0, 1, 22, 5, 2021);
+  lcd.init();
+  lcd.backlight();
   Serial.begin(9600);
   EEPROM.begin();
   //////////////////////////
@@ -905,6 +1070,19 @@ void setup()
   /////////////////////////////////////////////
   eeAddress = sizeof(float);
   EEPROM.get(eeAddress, custom);
+  for (uint8_t i = 0; i < sizeof(periods); i++)
+  {
+    periods[i] = 0;
+  }
+  eeAddress = sizeof(float) + sizeof(data_to_save);
+  EEPROM.get(eeAddress, periods);
+  for (uint8_t i = 0; i < sizeof(periods); i++)
+  {
+    Serial.print(periods[i]);
+    Serial.print(" | ");
+  }
+  Serial.println("");
+  // totalNumberof_turning = 24 / custom.PERIOD;
   Wire.begin(8);
   Wire.onReceive(receiveEvent);
   Wire.onRequest(on_Request);
@@ -913,7 +1091,6 @@ void setup()
   pinMode(motor, OUTPUT);
   digitalWrite(motor, 0);
   digitalWrite(heater, 0);
-  lcd.begin(16, 2);
   red.clean();
   green.clean();
   red.allOn_bri(2, 1);
@@ -936,12 +1113,18 @@ void setup()
   // turning_time = (sp1) + (sp0);
   // turning_time /= 100;
   //**************************************
-  tick = millis();
+  zeroticks();
   limit_up = custom.TMPHI;
   limit_dn = custom.TMPLO;
-  tmp_up = stien_three(A1, 10000.0, 1.286986010E-03, 2.067415798E-04, 1.923761216E-07);     ///first one epoxy 1500 dinar ok
-  tmp_dwn = stien_three(A0, 10000.0, 9.5569562991E-04, 2.4161535576E-04, 2.1035712840E-07); ///Black wire.Steel old (ok)
-  area = custom.SETTMP - tmp_dwn;
+  tmp_up = stien_three(A1, 10000.0, 1.286986010E-03, 2.067415798E-04, 1.923761216E-07); ///first one epoxy 1500 dinar ok
+  // tmp_dwn = stien_three(A0, 10000.0, 9.5569562991E-04, 2.4161535576E-04, 2.1035712840E-07); ///Black wire.Steel old (ok)
+  // area = custom.SETTMP - tmp_dwn;
+  //***************
+  sht31.read(SHT31_ADD, 0x2220);
+  m_temp = sht31.tempResult;
+  hum = sht31.humidityResult;
+  area = custom.SETTMP - m_temp;
+  ///***************************
   alarm(2);
   TCCR1A = 0;            ///Reset Timer1;
   TCCR1B |= (1 << CS12); ///Set the Prescalor(1,0,0)256
@@ -994,29 +1177,44 @@ void loop()
     alar_count = 0;
   }
   /////there is conflict with Rtc after 15 minuts becuse [i2c address of FD560 = i2c address of DS3231 ](on the same pins)
-  // while ((red.get_key() == 0x7F) && !lc1) ///set key=7f on press,3f on relesed k1+k2(dual keys)
-  // {
-  //   tick = millis();
-  //   lc1 = 1;
-  //   sw = 1;
-  //   lcd.clear();
-  //   count = 1;
-  //   alarm(1);
-  //   manu1();
-  //   manu2();
-  //   manu3();
-  //   summry();
-  //   save_func();
-  // }
+  while ((red.get_key() == 0x7F) && !lc1) ///set key=7f on press,3f on relesed k1+k2(dual keys)
+  {
+    zeroticks();
+
+    while (!keystat)
+    {
+      if (millis() - tick > 500)
+      {
+        zeroticks();
+        keystat = 1;
+        if ((red.get_key() == 0x7F) && !lc1)
+        {
+
+          lc1 = 1;
+          sw = 1;
+          lcd.clear();
+          count = 1;
+          alarm(1);
+          manu1();
+          manu2();
+          manu3();
+          summry();
+          save_func();
+        }
+      }
+    }
+    keystat = 0;
+  }
+  /////////////////////////////////
   while (bitRead(red.get_key(), 6) && !t) ///Bit 6 of the return byte is the status bit detecting if key is pressed or relesed
   {
-    Serial.print(String((red.get_key()), HEX) + "H | "); ///When key Pressed
+    // Serial.print(String((red.get_key()), HEX) + "H | "); ///When key Pressed
     t = 1;
   }
 
   while (!bitRead(red.get_key(), 6) && t)
   {
-    Serial.println(String((red.get_key()), HEX) + "H"); ///When key Relesed
+    // Serial.println(String((red.get_key()), HEX) + "H"); ///When key Relesed
     t = 0;
   }
 
@@ -1035,10 +1233,11 @@ void loop()
   display();
 
   SevenSegmentdisplay();
+  Cycle();
+  start_motor();
+  // limit_warning();
 
-  limit_warning();
-
-  turning_tone();
+  // turning_tone();
 
   saving_data();
 }
@@ -1055,6 +1254,7 @@ ISR(TIMER1_COMPA_vect)
   }
 
   hum_trig++;
-  auto_turn();
+  // auto_turn();
+  // TurningCalculation();
   update_data();
 }
