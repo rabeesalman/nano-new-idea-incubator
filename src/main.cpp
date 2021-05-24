@@ -49,7 +49,6 @@ boolean result[41];             //for DHT11
 unsigned int databytes[5];
 unsigned int checksum;
 float m_temp = 0.0;
-bool b = 0;
 float factor = 0.0;
 double x2;
 bool t = 0;
@@ -66,12 +65,12 @@ int eeAddress = 0;
 bool save_signal = 0;
 unsigned long sig = 0;
 bool pm = 0;
-uint8_t hourTosec = 0;
+// uint8_t hourTosec = 0;
 unsigned long turnTimeCounter = 0;
 bool corrector = 0;
-uint8_t totalNumberof_turning = 0;
-unsigned long time_elapsed = 0;
-unsigned long nextTime;
+// uint8_t totalNumberof_turning = 0;
+// unsigned long time_elapsed = 0;
+// unsigned long nextTime;
 int SEC = 0, MIN = 0, HOR = 0;
 
 struct data_tobe_send
@@ -242,60 +241,17 @@ void Cycle()
 {
   if (custom.TURN)
   {
-    //**************Finding the next time period cycle
-    // for (uint8_t i = 3; i < (24 / custom.PERIOD) + 3; i++)
-    // {
-
-    //   unsigned int fm = periods[0] + (periods[i] * 60) - RTC.minuts * 60 - RTC.second;
-
-    //   if (fm >= 0 && fm < (custom.PERIOD * 60))
-    //   {
-    //     time_elapsed = periods[i] * 60 + periods[0] - RTC.minuts * 60 - RTC.second;
-    //   }
-    //   else
-    //   {
-    //     i++;
-    //   }
-
-    // }
     //********************************************************generic time
-      SEC = periods[0], MIN = periods[1], HOR = periods[3];
-
-      // if (periods[i] - periods[i - 1] < 0)
-      // {
-      //   HOR += 24;
-
-        if (HOR - RTC.hours <= (custom.PERIOD))
-        {
-          HOR = HOR - RTC.hours;
-        }
-      // }
-      if (MIN - RTC.minuts < 0)
-      {
-        MIN = MIN + 60;
-
-        // HOR++;
-      }
-      if (SEC - RTC.second < 0)
-      {
-        SEC = SEC + 60;
-
-        // MIN++;
-      }
-      else
-      {
-        SEC = SEC - RTC.second;
-        MIN = MIN - RTC.minuts;
-        HOR = periods[3] - RTC.hours;
-      }
-    
-    ///****************************
-    if (RTC.second == periods[0] && RTC.minuts == periods[1] && !corrector)
+    for (uint8_t i = 3; i < (24 / custom.PERIOD) + 3; i++)
     {
-      for (uint8_t i = 3; i < (24 / custom.PERIOD) + 3; i++)
+      if ((periods[i] - RTC.hours < custom.PERIOD) && (periods[i] - RTC.hours >= 0))
       {
-        if (RTC.hours == periods[i])
+        HOR = periods[i] - RTC.hours;
+        MIN = periods[1] + (59 - periods[1]) - RTC.minuts;
+        SEC = periods[0] + (59 - periods[0]) - RTC.second;
+        if (HOR == 0 && MIN == 0 && SEC == 0 && !corrector)
         {
+          turning_tone();
           turnTimeCounter = millis();
           corrector = 1;
         }
@@ -336,21 +292,6 @@ void saving_data()
         periods[i] = periods[i] - 24;
       }
     }
-
-    //**********for test in minuts !!!!!!***
-    // periods[0] = RTC.second;
-    // periods[1] = RTC.hours;
-    // periods[2] = RTC.minuts;
-    // totalNumberof_turning = 24 / custom.PERIOD;
-    // for (uint8_t i = 3; i < (24 / custom.PERIOD) + 3; i++)
-    // {
-    //   periods[i] = periods[i - 1] + custom.PERIOD;
-    //   if (periods[i] > 59)
-    //   {
-    //     periods[i] = periods[i] - 60;
-    //   }
-    // }
-    //******
     eeAddress = sizeof(float) + sizeof(data_to_save);
     EEPROM.put(eeAddress, periods);
     EEPROM.get(eeAddress, periods);
@@ -685,8 +626,7 @@ void manual_turn()
 
 void turning_tone()
 {
-  while (b)
-  {
+ 
     pinMode(buz, OUTPUT);
     tone(buz, 900, 150);
     delay(225);
@@ -718,8 +658,7 @@ void turning_tone()
     delay(370);
     noTone(buz);
     // delay(45);
-    b = 0;
-  }
+ 
 }
 
 void display()
@@ -754,6 +693,7 @@ void display()
     }
     else
       lcd.print(m_temp);
+    lcd.print("/");
     lcd.print(HOR);
     lcd.print(":");
     lcd.print(MIN);
@@ -761,6 +701,7 @@ void display()
     lcd.print(SEC);
     // lcd.print("SP:");
     // lcd.print(custom.SETTMP);
+    // lcd.print("/");
     // lcd.print(time_elapsed);
     // lcd.print("/");
   }
@@ -1059,7 +1000,7 @@ void save_func()
 
 void setup()
 {
-  rtcWrite(0, 56, 7, 0, 0, 1, 22, 5, 2021);
+  // rtcWrite(30, 43, 8, 0, 0, 1, 22, 5, 2021);
   lcd.init();
   lcd.backlight();
   Serial.begin(9600);
@@ -1076,13 +1017,6 @@ void setup()
   }
   eeAddress = sizeof(float) + sizeof(data_to_save);
   EEPROM.get(eeAddress, periods);
-  for (uint8_t i = 0; i < sizeof(periods); i++)
-  {
-    Serial.print(periods[i]);
-    Serial.print(" | ");
-  }
-  Serial.println("");
-  // totalNumberof_turning = 24 / custom.PERIOD;
   Wire.begin(8);
   Wire.onReceive(receiveEvent);
   Wire.onRequest(on_Request);
@@ -1233,13 +1167,15 @@ void loop()
   display();
 
   SevenSegmentdisplay();
+
   Cycle();
+
   start_motor();
+
   // limit_warning();
 
-  // turning_tone();
-
   saving_data();
+
 }
 
 ISR(TIMER1_COMPA_vect)
