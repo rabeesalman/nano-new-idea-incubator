@@ -30,8 +30,8 @@ unsigned int cnt = 0, seconds = 0, minuts = 0;
 // double Sum = 0.0;
 bool lc1 = 0, lc2 = 0;
 /////////////////////////
-uint8_t New_Time = 0;
-uint8_t minut_now = 0;
+// uint8_t New_Time = 0;
+// uint8_t minut_now = 0;
 //
 bool sw = 0;
 unsigned int cycle_time = 50;
@@ -65,12 +65,8 @@ int eeAddress = 0;
 bool save_signal = 0;
 unsigned long sig = 0;
 bool pm = 0;
-// uint8_t hourTosec = 0;
 unsigned long turnTimeCounter = 0;
 bool corrector = 0;
-// uint8_t totalNumberof_turning = 0;
-// unsigned long time_elapsed = 0;
-// unsigned long nextTime;
 int SEC = 0, MIN = 0, HOR = 0;
 
 struct data_tobe_send
@@ -235,6 +231,43 @@ void start_motor()
       digitalWrite(motor, 0);
     }
   }
+}
+
+void turning_tone()
+{
+ 
+    pinMode(buz, OUTPUT);
+    tone(buz, 900, 150);
+    delay(225);
+    noTone(buz);
+    tone(buz, 900, 150);
+    delay(225);
+    noTone(buz);
+    delay(50);
+    tone(buz, 900, 150);
+    delay(500);
+    noTone(buz);
+    ////////////////////
+    tone(buz, 900, 150);
+    delay(180);
+    noTone(buz);
+    delay(1);
+
+    tone(buz, 900, 150);
+    delay(270);
+    noTone(buz);
+    delay(70);
+
+    tone(buz, 900, 150);
+    delay(180);
+    noTone(buz);
+    delay(1);
+
+    tone(buz, 900, 150);
+    delay(370);
+    noTone(buz);
+    // delay(45);
+ 
 }
 
 void Cycle()
@@ -624,42 +657,7 @@ void manual_turn()
   }
 }
 
-void turning_tone()
-{
- 
-    pinMode(buz, OUTPUT);
-    tone(buz, 900, 150);
-    delay(225);
-    noTone(buz);
-    tone(buz, 900, 150);
-    delay(225);
-    noTone(buz);
-    delay(50);
-    tone(buz, 900, 150);
-    delay(500);
-    noTone(buz);
-    ////////////////////
-    tone(buz, 900, 150);
-    delay(180);
-    noTone(buz);
-    delay(1);
 
-    tone(buz, 900, 150);
-    delay(270);
-    noTone(buz);
-    delay(70);
-
-    tone(buz, 900, 150);
-    delay(180);
-    noTone(buz);
-    delay(1);
-
-    tone(buz, 900, 150);
-    delay(370);
-    noTone(buz);
-    // delay(45);
- 
-}
 
 void display()
 {
