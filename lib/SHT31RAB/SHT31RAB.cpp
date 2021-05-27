@@ -4,7 +4,7 @@
 
 void SHT31RAB::del()
 {
-    delayMicroseconds(5); //2*5usec=100kHz
+    delayMicroseconds(4); //2*5usec=100kHz
 }
 
 void SHT31RAB::start_signal()
@@ -130,7 +130,7 @@ void SHT31RAB::read(byte M_add, uint16_t command) ///Periodic Data Acquisition M
                         case 1:
                             tmp = tmp + xnum;
                             temp = -45.0 + (175.0 * float(tmp) / 65535.0);
-                            tempResult=temp;
+                            tempResult = temp;
                             // Serial.print(temp); Serial.print(" | ");
                             break;
                         case 3:
@@ -140,11 +140,11 @@ void SHT31RAB::read(byte M_add, uint16_t command) ///Periodic Data Acquisition M
                         case 4:
                             hum = hum + xnum;
                             humidity = 100.0 * float(hum) / 65535.0;
-                            humidityResult=humidity;
+                            humidityResult = humidity;
                             //  Serial.print(humidity); Serial.println(" ");
                             break;
                         default:
-                            xnum=0;
+                            xnum = 0;
                             break;
                         }
                     }
@@ -181,4 +181,27 @@ void SHT31RAB::read(byte M_add, uint16_t command) ///Periodic Data Acquisition M
     // Serial.print(" | ");
     // Serial.print(humidity);
     // Serial.println(" ");
+}
+
+void SHT31RAB::Break()
+{
+    byte MSB_command = (0x3093 & 0b1111111100000000) >> 8; //get the MSByte of the 16-bit break command 0x3093
+    byte LSB_command = 0x3093 & 0b0000000011111111;        //get the LSByte of the 16-bit break command
+    start_signal();
+    Byt_txrx(0x44 << 1);
+    if (!ackn())
+    {
+        pinMode(da, OUTPUT);
+        Byt_txrx(MSB_command);
+
+        if (!ackn())
+        {
+            pinMode(da, OUTPUT);
+            Byt_txrx(LSB_command);
+            if (!ackn())
+            {
+                stop_signal();
+            }
+        }
+    }
 }

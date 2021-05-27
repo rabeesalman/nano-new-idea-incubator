@@ -26,13 +26,8 @@ double area;
 bool st = 1, flag = 0;
 unsigned long previousMillis1 = 0.0;
 unsigned long tick = 0;
-unsigned int cnt = 0, seconds = 0, minuts = 0;
-// double Sum = 0.0;
 bool lc1 = 0, lc2 = 0;
 /////////////////////////
-// uint8_t New_Time = 0;
-// uint8_t minut_now = 0;
-//
 bool sw = 0;
 unsigned int cycle_time = 50;
 float turning_time = 8.0;
@@ -45,22 +40,19 @@ double limit_up, limit_dn;
 bool x = 0;
 uint8_t hum_trig = 0;
 const uint16_t t1_comp = 62500; //1sec =(1 sec)16M/256;
-boolean result[41];             //for DHT11
-unsigned int databytes[5];
-unsigned int checksum;
+// boolean result[41];             //for DHT11
+// unsigned int databytes[5];
+// unsigned int checksum;
 float m_temp = 0.0;
 float factor = 0.0;
 double x2;
 bool t = 0;
 bool keystat = 0;
 //*****************************from arduino to esp
-bool lamp = false;
-bool fan = true, water = true, door = false, eg = false;
-float h;
+bool fan = true, water = true, door = false, eg = false, lamp = false;
 char arryx[31];
 char _data[sizeof(float)];
 float g[3];
-String num;
 int eeAddress = 0;
 bool save_signal = 0;
 unsigned long sig = 0;
@@ -116,6 +108,8 @@ struct epromsaved
 } factory_defult = {37.5f, 37.9f, 37.3f, 8, 70, 40, 21, 1, 21, 1, 1, 12, 33};
 //  {37.5f, 37.9f, 37.1f, 8, 70, 40, 21, 1};
 epromsaved custom = {0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+epromsaved _Custom = {0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; ////for copy original values before saving in panel
+
 epromsaved data_to_save = {0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 ////**************
 #define DS3231_ADD 0x68 //0x68 same address for FD650
@@ -235,39 +229,38 @@ void start_motor()
 
 void turning_tone()
 {
- 
-    pinMode(buz, OUTPUT);
-    tone(buz, 900, 150);
-    delay(225);
-    noTone(buz);
-    tone(buz, 900, 150);
-    delay(225);
-    noTone(buz);
-    delay(50);
-    tone(buz, 900, 150);
-    delay(500);
-    noTone(buz);
-    ////////////////////
-    tone(buz, 900, 150);
-    delay(180);
-    noTone(buz);
-    delay(1);
 
-    tone(buz, 900, 150);
-    delay(270);
-    noTone(buz);
-    delay(70);
+  pinMode(buz, OUTPUT);
+  tone(buz, 900, 150);
+  delay(225);
+  noTone(buz);
+  tone(buz, 900, 150);
+  delay(225);
+  noTone(buz);
+  delay(50);
+  tone(buz, 900, 150);
+  delay(500);
+  noTone(buz);
+  ////////////////////
+  tone(buz, 900, 150);
+  delay(180);
+  noTone(buz);
+  delay(1);
 
-    tone(buz, 900, 150);
-    delay(180);
-    noTone(buz);
-    delay(1);
+  tone(buz, 900, 150);
+  delay(270);
+  noTone(buz);
+  delay(70);
 
-    tone(buz, 900, 150);
-    delay(370);
-    noTone(buz);
-    // delay(45);
- 
+  tone(buz, 900, 150);
+  delay(180);
+  noTone(buz);
+  delay(1);
+
+  tone(buz, 900, 150);
+  delay(370);
+  noTone(buz);
+  // delay(45);
 }
 
 void Cycle()
@@ -456,7 +449,7 @@ double stien_three(byte Thermistor_Pin, float Rdivid, float A, float B, float C)
 
 void humidity()
 {
-  while (hum_trig == 1)
+  if (hum_trig >= 1)
   {
     // pinMode(DHT22_data_pin, OUTPUT);
     // digitalWrite(DHT22_data_pin, LOW);
@@ -499,7 +492,6 @@ void humidity()
 
 void update_data()
 {
-
   // tmp_dwn = stien_three(A0, 10000.0, 9.2842025712E-04, 2.4620685389E-04, 1.9112690439E-07) + 0.08; //9965.0 ///Black wire.Steel old (ok)
   //*************************************************************************************************
   // tmp_dwn = stien_three(A0, 10000.0,1.776109629E-03,1.273236472E-04,5.098492533E-07); ///Gray wire on green segment (ok)
@@ -657,8 +649,6 @@ void manual_turn()
   }
 }
 
-
-
 void display()
 {
   if (!sw)
@@ -705,14 +695,39 @@ void display()
   }
 }
 
-void while_(uint8_t x)
+void next_button(uint8_t x) //next button
 {
-  while ((red.get_key() == 0x4f) && (millis() - tick > 200))
+  while ((red.get_key() == 0x4f) && (millis() - tick > 200)) //next button
   {
     zeroticks();
     lcd.clear();
     count = x;
     alarm(1);
+  }
+}
+
+void preview()
+{
+  lcd.setCursor(0, 0);
+  lcd.print("Temp=");
+  lcd.print(_Custom.SETTMP);
+  lcd.print("C");
+  lcd.setCursor(0, 1);
+  lcd.print("Cyc=");
+  lcd.print(cycle_time);
+  lcd.print(",");
+  lcd.print("Turn=");
+  lcd.print(turning_time);
+  lcd.print(" ");
+  red.get_key();
+}
+
+void summry()
+{
+  while (count == 9)
+  {
+    preview();
+    next_button(10);
   }
 }
 
@@ -722,14 +737,14 @@ void sub_disp()
   lcd.print("SET TEMP");
   lcd.setCursor(4, 1);
   lcd.print("[");
-  lcd.print(custom.SETTMP);
+  lcd.print(_Custom.SETTMP);
   lcd.print("]");
   lcd.print("C");
 }
 
-void manu1() ////for setting set point
+void manu1() // setting set point
 {
-  zeroticks(); ////optional
+  zeroticks();
   sub_disp();
 
   bool a = 0;
@@ -746,11 +761,11 @@ void manu1() ////for setting set point
       }
       while (a && (red.get_key() == 0x47))
       {
-        custom.SETTMP += 0.01;
+        _Custom.SETTMP += 0.1;
 
-        while (custom.SETTMP > 48.25)
+        while (_Custom.SETTMP > 42.5)
         {
-          custom.SETTMP = 48.25;
+          _Custom.SETTMP = 42.5;
         }
         sub_disp();
         if ((red.get_key() == 0x07))
@@ -761,11 +776,11 @@ void manu1() ////for setting set point
       }
       while (!a && (red.get_key() == 0x47))
       {
-        custom.SETTMP += 0.01;
+        _Custom.SETTMP += 0.1;
 
-        while (custom.SETTMP > 48.25)
+        while (_Custom.SETTMP > 42.5)
         {
-          custom.SETTMP = 48.25;
+          _Custom.SETTMP = 42.5;
         }
 
         sub_disp();
@@ -793,10 +808,10 @@ void manu1() ////for setting set point
       }
       while (a && (red.get_key() == 0x57))
       {
-        custom.SETTMP -= 0.01;
-        while (custom.SETTMP < 12.25)
+        _Custom.SETTMP -= 0.1;
+        while (_Custom.SETTMP < 34.0)
         {
-          custom.SETTMP = 12.25;
+          _Custom.SETTMP = 34.0;
         }
 
         sub_disp();
@@ -810,10 +825,10 @@ void manu1() ////for setting set point
       while (!a && (red.get_key() == 0x57))
       {
         delay(300);
-        custom.SETTMP -= 0.01;
-        while (custom.SETTMP < 12.25)
+        _Custom.SETTMP -= 0.1;
+        while (_Custom.SETTMP < 20.5)
         {
-          custom.SETTMP = 12.25;
+          _Custom.SETTMP = 20.5;
         }
 
         sub_disp();
@@ -829,45 +844,215 @@ void manu1() ////for setting set point
         }
       }
     }
-    while_(2);
+    next_button(2);
   }
 }
 
-void manu2() ////for setting set point
+void hitmpAlarm()
 {
   while (count == 2)
   {
     while ((red.get_key() == 0x47) && (millis() - tick > 150))
     {
       zeroticks();
-      cycle_time++;
-      while (cycle_time > 360)
+      _Custom.TMPHI += 0.05;
+      while (_Custom.TMPHI > _Custom.SETTMP + 1.5)
       {
-        cycle_time = 1;
+        _Custom.TMPHI = _Custom.SETTMP + 1.5;
       }
     }
     while ((red.get_key() == 0x57) && (millis() - tick > 150))
     {
       zeroticks();
-      cycle_time--;
-      while (cycle_time < 1)
+      _Custom.TMPHI -= 0.05;
+      while (_Custom.TMPHI < _Custom.SETTMP + 0.25)
       {
-        cycle_time = 360;
+        _Custom.TMPHI = _Custom.SETTMP + 0.25;
+      }
+    }
+    lcd.setCursor(0, 0);
+    lcd.print("HIGH TEMP ALARM");
+    lcd.setCursor(0, 1);
+    lcd.print("  (");
+    lcd.print(_Custom.TMPHI);
+    lcd.print(") C  ");
+    next_button(3);
+  }
+}
+
+void lotmpAlarm()
+{
+  while (count == 3)
+  {
+    while ((red.get_key() == 0x47) && (millis() - tick > 150))
+    {
+      zeroticks();
+      _Custom.TMPLO += 0.05;
+      while (_Custom.TMPLO > _Custom.SETTMP - 0.25)
+      {
+        _Custom.TMPLO = _Custom.SETTMP - 0.25;
+      }
+    }
+    while ((red.get_key() == 0x57) && (millis() - tick > 150))
+    {
+      zeroticks();
+      _Custom.TMPLO -= 0.05;
+      while (_Custom.TMPLO < _Custom.SETTMP - 2.5)
+      {
+        _Custom.TMPLO = _Custom.SETTMP - 2.5;
+      }
+    }
+    lcd.setCursor(0, 0);
+    lcd.print("LOW TEMP ALARM");
+    lcd.setCursor(0, 1);
+    lcd.print("  (");
+    lcd.print(_Custom.TMPLO);
+    lcd.print(") C  ");
+    next_button(4);
+  }
+}
+
+void hihumAlarm()
+{
+  while (count == 4)
+  {
+    while ((red.get_key() == 0x47) && (millis() - tick > 150))
+    {
+      zeroticks();
+      _Custom.HHI += 1;
+      while (_Custom.HHI > 80)
+      {
+        _Custom.HHI = 80;
+      }
+    }
+    while ((red.get_key() == 0x57) && (millis() - tick > 150))
+    {
+      zeroticks();
+      _Custom.HHI -= 1;
+      while (_Custom.HHI < 30)
+      {
+        _Custom.HHI = 30;
+      }
+    }
+    lcd.setCursor(0, 0);
+    lcd.print("HI HUMIDITY ALAR");
+    lcd.setCursor(0, 1);
+    lcd.print("     (");
+    lcd.print(_Custom.HHI);
+    lcd.print(")%    ");
+    next_button(5);
+  }
+}
+
+void lohumAlarm()
+{
+  while (count == 5)
+  {
+    while ((red.get_key() == 0x47) && (millis() - tick > 150))
+    {
+      zeroticks();
+      _Custom.HLO += 1;
+      while (_Custom.HLO > _Custom.HHI - 5)
+      {
+        _Custom.HLO = _Custom.HHI - 5;
+      }
+    }
+    while ((red.get_key() == 0x57) && (millis() - tick > 150))
+    {
+      zeroticks();
+      _Custom.HLO -= 1;
+      while (_Custom.HLO < 30)
+      {
+        _Custom.HLO = 30;
+      }
+    }
+    lcd.setCursor(0, 0);
+    lcd.print("LO HUMIDITY ALAR");
+    lcd.setCursor(0, 1);
+    lcd.print("    (");
+    lcd.print(_Custom.HLO);
+    lcd.print(")%  ");
+    next_button(6);
+  }
+}
+
+void turningSetting()
+{
+  while (count == 6)
+  {
+    while ((red.get_key() == 0x47) && (millis() - tick > 150))
+    {
+      zeroticks();
+      while (_Custom.TURN)
+      {
+        _Custom.TURN = !_Custom.TURN;
+      }
+    }
+    while ((red.get_key() == 0x57) && (millis() - tick > 150))
+    {
+      zeroticks();
+      while (!_Custom.TURN)
+      {
+        _Custom.TURN = !_Custom.TURN;
+      }
+    }
+    lcd.setCursor(0, 0);
+    lcd.print("TURNING SETTING");
+    lcd.setCursor(0, 1);
+
+    if (_Custom.TURN)
+    {
+      lcd.print(" TURN IS ON NOW ");
+    }
+    else
+    {
+      lcd.print(" TURN IS OFF NOW");
+    }
+
+    next_button(7);
+  }
+}
+
+void cycle_time_setting() // setting cycle_time
+{
+  while (count == 7 && _Custom.TURN)
+  {
+    while ((red.get_key() == 0x47) && (millis() - tick > 150))
+    {
+      zeroticks();
+      _Custom.PERIOD++;
+      while (_Custom.PERIOD > 12)
+      {
+        _Custom.PERIOD = 12;
+      }
+    }
+    while ((red.get_key() == 0x57) && (millis() - tick > 150))
+    {
+      zeroticks();
+      _Custom.PERIOD--;
+      while (_Custom.PERIOD < 2)
+      {
+        _Custom.PERIOD = 2;
       }
     }
     lcd.setCursor(0, 0);
     lcd.print("Set [Cycle Time]");
     lcd.setCursor(0, 1);
-    lcd.print("Cycle=");
-    lcd.print(cycle_time);
-    lcd.print("Minute");
-    while_(3);
+    lcd.print("EVERY(");
+    lcd.print(_Custom.PERIOD);
+    lcd.print(")HOURS");
+    next_button(8);
+  }
+  while (count == 7 && !_Custom.TURN)
+  {
+    count = 9;
+    summry();
   }
 }
 
-void manu3() ////for setting set point
+void turning_time_setting() // setting turning_time
 {
-  while (count == 3)
+  while (count == 8)
   {
     while ((red.get_key() == 0x47) && (millis() - tick > 150))
     {
@@ -893,73 +1078,23 @@ void manu3() ////for setting set point
     lcd.print("Turn =");
     lcd.print(turning_time);
     lcd.print("Second");
-    while_(4);
+    next_button(9);
   }
 }
 
-void preview()
-{
-  lcd.setCursor(0, 0);
-  lcd.print("Temp=");
-  lcd.print(custom.SETTMP);
-  lcd.print("C");
-  lcd.setCursor(0, 1);
-  lcd.print("Cyc=");
-  lcd.print(cycle_time);
-  lcd.print(",");
-  lcd.print("Turn=");
-  lcd.print(turning_time);
-  lcd.print(" ");
-  red.get_key();
-}
 
-void summry() ////for setting set point
-{
-  while (count == 4)
-  {
-    preview();
-    while_(5);
-  }
-}
 
 void save_func()
 {
-  while (count == 5)
+  while (count == 10)
   {
     lcd.setCursor(0, 0);
     lcd.print("[SAVING DATA...]");
-    // custom.SETTMP *= 100.00;
-    // sp0 = (int)custom.SETTMP;
-    // sp0 = sp0 / 100 % 100;
-    // sp1 = (int)custom.SETTMP;
-    // sp1 = sp1 % 100;
-    // eeprom.write(0x50, 0, sp0);
-    // delay(500);
-    // eeprom.write(0x50, 1, sp1);
-    delay(500);
-    // eeprom.write(0x50, 2, cycle_time);
-    delay(500);
-    // turning_time *= 100.00;
-    // sp0 = (int)turning_time;
-    // sp0 = sp0 / 100 % 100;
-    // sp1 = (int)turning_time;
-    // sp1 = sp1 % 100;
-    // eeprom.write(0x50, 3, sp0);
-    // delay(500);
-    // eeprom.write(0x50, 4, sp1);
     delay(500);
     lcd.setCursor(0, 0);
     lcd.print(" [SAVING DONE.] ");
-    delay(500);
-    // sp0 = eeprom.read(0x50, 0);
-    // sp0 *= 100;
-    // sp1 = eeprom.read(0x50, 1);
     // custom.SETTMP = (sp1) + (sp0);
-    // custom.SETTMP /= 100;
     // cycle_time = eeprom.read(0x50, 2);
-    // sp0 = eeprom.read(0x50, 3);
-    // sp0 *= 100;
-    // sp1 = eeprom.read(0x50, 4);
     // turning_time = (sp1) + (sp0);
     // turning_time /= 100;
     sw = 0;
@@ -967,8 +1102,8 @@ void save_func()
     count = 0;
     stable = 0;
     x = 0;
-    limit_up = custom.TMPHI;
-    limit_dn = custom.TMPLO;
+    // limit_up = _Custom.TMPHI;
+    // limit_dn = _Custom.TMPLO;
     alarm(2);
     lcd.clear();
   }
@@ -1109,10 +1244,9 @@ void loop()
     alar_count = 0;
   }
   /////there is conflict with Rtc after 15 minuts becuse [i2c address of FD560 = i2c address of DS3231 ](on the same pins)
-  while ((red.get_key() == 0x7F) && !lc1) ///set key=7f on press,3f on relesed k1+k2(dual keys)
+  while ((red.get_key() == 0x7F) && !lc1) ///set key=7f on press,3f on relesed k1+k2(dual keys)(manu)
   {
     zeroticks();
-
     while (!keystat)
     {
       if (millis() - tick > 500)
@@ -1121,15 +1255,25 @@ void loop()
         keystat = 1;
         if ((red.get_key() == 0x7F) && !lc1)
         {
-
+          digitalWrite(heater, 0);
+          hum_trig = 0;
+          sht31.Break();
+          memcpy((void *)&_Custom, (void *)&custom, sizeof(_Custom)); ///
           lc1 = 1;
           sw = 1;
           lcd.clear();
           count = 1;
           alarm(1);
           manu1();
-          manu2();
-          manu3();
+          hitmpAlarm();
+          lotmpAlarm();
+          hihumAlarm();
+          lohumAlarm();
+          turningSetting();
+          cycle_time_setting();
+          turning_time_setting();
+          // manu2();
+          // manu3();
           summry();
           save_func();
         }
@@ -1173,22 +1317,12 @@ void loop()
   // limit_warning();
 
   saving_data();
-
 }
 
 ISR(TIMER1_COMPA_vect)
 {
   TCNT1 = 0;
-  rtcRead();
-  seconds++;
-  if (seconds > 59)
-  {
-    seconds = 0;
-    minuts++;
-  }
-
   hum_trig++;
-  // auto_turn();
-  // TurningCalculation();
+  rtcRead();
   update_data();
 }
