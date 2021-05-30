@@ -60,8 +60,9 @@ bool pm = 0;
 unsigned long turnTimeCounter = 0;
 bool corrector = 0;
 int SEC = 0, MIN = 0, HOR = 0;
+unsigned long manu_counter = 3000;
 
-struct data_tobe_send
+struct data_tobe_send ////sending live data to esp8266(size 16 byte)
 {
   float TEMP;
   uint16_t year;
@@ -85,8 +86,11 @@ struct data_tobe_send
   // bool LAMP;
   // bool WATER;
   // bool EGG;
+  uint8_t Esecond;
+  uint8_t Eminuts;
+  uint8_t Ehours;
 
-} data = {0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+} data = {0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 struct epromsaved
 {
@@ -121,7 +125,7 @@ epromsaved data_to_save = {0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 #define MONTH_IN_YEAR 5
 #define YEAR 6
 
-struct main
+struct Clock
 {
   uint8_t second;
   uint8_t minuts;
@@ -290,7 +294,7 @@ void Cycle()
   }
 }
 
-void saving_data()
+void Saving_data_Web()
 {
   if ((!Wire.available()) && (millis() - sig >= 5000) && (save_signal))
   {
@@ -523,6 +527,9 @@ void update_data()
 
   limit_up = custom.TMPHI;
   limit_dn = custom.TMPLO;
+  data.Esecond = SEC;
+  data.Eminuts = MIN;
+  data.Ehours = HOR;
 }
 
 void SevenSegmentdisplay()
@@ -695,6 +702,29 @@ void display()
   }
 }
 
+uint8_t Plus_Minus(uint8_t featu, uint8_t limhi, uint8_t limlo)
+{
+  while ((red.get_key() == 0x47) && (millis() - tick > 150))
+  {
+    zeroticks();
+    featu++;
+    while (featu > limhi)
+    {
+      featu = limhi;
+    }
+  }
+  while ((red.get_key() == 0x57) && (millis() - tick > 150))
+  {
+    zeroticks();
+    featu--;
+    while (featu < limlo)
+    {
+      featu = limlo;
+    }
+  }
+  return featu;
+}
+
 void next_button(uint8_t x) //next button
 {
   while ((red.get_key() == 0x4f) && (millis() - tick > 200)) //next button
@@ -706,27 +736,27 @@ void next_button(uint8_t x) //next button
   }
 }
 
-void preview()
-{
-  lcd.setCursor(0, 0);
-  lcd.print("Temp=");
-  lcd.print(_Custom.SETTMP);
-  lcd.print("C");
-  lcd.setCursor(0, 1);
-  lcd.print("Cyc=");
-  lcd.print(cycle_time);
-  lcd.print(",");
-  lcd.print("Turn=");
-  lcd.print(turning_time);
-  lcd.print(" ");
-  red.get_key();
-}
+// void preview()
+// {
+//   lcd.setCursor(0, 0);
+//   lcd.print("Temp=");
+//   lcd.print(_Custom.SETTMP);
+//   lcd.print("C");
+//   lcd.setCursor(0, 1);
+//   lcd.print("Cyc=");
+//   lcd.print(cycle_time);
+//   lcd.print(",");
+//   lcd.print("Turn=");
+//   lcd.print(turning_time);
+//   lcd.print(" ");
+//   red.get_key();
+// }
 
 void summry()
 {
   while (count == 9)
   {
-    preview();
+    // preview();
     next_button(10);
   }
 }
@@ -746,7 +776,6 @@ void manu1() // setting set point
 {
   zeroticks();
   sub_disp();
-
   bool a = 0;
 
   while (count == 1)
@@ -850,6 +879,7 @@ void manu1() // setting set point
 
 void hitmpAlarm()
 {
+
   while (count == 2)
   {
     while ((red.get_key() == 0x47) && (millis() - tick > 150))
@@ -882,6 +912,7 @@ void hitmpAlarm()
 
 void lotmpAlarm()
 {
+
   while (count == 3)
   {
     while ((red.get_key() == 0x47) && (millis() - tick > 150))
@@ -914,26 +945,10 @@ void lotmpAlarm()
 
 void hihumAlarm()
 {
+
   while (count == 4)
   {
-    while ((red.get_key() == 0x47) && (millis() - tick > 150))
-    {
-      zeroticks();
-      _Custom.HHI += 1;
-      while (_Custom.HHI > 80)
-      {
-        _Custom.HHI = 80;
-      }
-    }
-    while ((red.get_key() == 0x57) && (millis() - tick > 150))
-    {
-      zeroticks();
-      _Custom.HHI -= 1;
-      while (_Custom.HHI < 30)
-      {
-        _Custom.HHI = 30;
-      }
-    }
+    _Custom.HHI = Plus_Minus(_Custom.HHI, 80, 30);
     lcd.setCursor(0, 0);
     lcd.print("HI HUMIDITY ALAR");
     lcd.setCursor(0, 1);
@@ -946,26 +961,10 @@ void hihumAlarm()
 
 void lohumAlarm()
 {
+
   while (count == 5)
   {
-    while ((red.get_key() == 0x47) && (millis() - tick > 150))
-    {
-      zeroticks();
-      _Custom.HLO += 1;
-      while (_Custom.HLO > _Custom.HHI - 5)
-      {
-        _Custom.HLO = _Custom.HHI - 5;
-      }
-    }
-    while ((red.get_key() == 0x57) && (millis() - tick > 150))
-    {
-      zeroticks();
-      _Custom.HLO -= 1;
-      while (_Custom.HLO < 30)
-      {
-        _Custom.HLO = 30;
-      }
-    }
+    _Custom.HLO = Plus_Minus(_Custom.HLO, _Custom.HHI - 5, 30);
     lcd.setCursor(0, 0);
     lcd.print("LO HUMIDITY ALAR");
     lcd.setCursor(0, 1);
@@ -978,6 +977,7 @@ void lohumAlarm()
 
 void turningSetting()
 {
+
   while (count == 6)
   {
     while ((red.get_key() == 0x47) && (millis() - tick > 150))
@@ -1015,26 +1015,10 @@ void turningSetting()
 
 void cycle_time_setting() // setting cycle_time
 {
+
   while (count == 7 && _Custom.TURN)
   {
-    while ((red.get_key() == 0x47) && (millis() - tick > 150))
-    {
-      zeroticks();
-      _Custom.PERIOD++;
-      while (_Custom.PERIOD > 12)
-      {
-        _Custom.PERIOD = 12;
-      }
-    }
-    while ((red.get_key() == 0x57) && (millis() - tick > 150))
-    {
-      zeroticks();
-      _Custom.PERIOD--;
-      while (_Custom.PERIOD < 2)
-      {
-        _Custom.PERIOD = 2;
-      }
-    }
+    _Custom.PERIOD = Plus_Minus(_Custom.PERIOD, 12, 2);
     lcd.setCursor(0, 0);
     lcd.print("Set [Cycle Time]");
     lcd.setCursor(0, 1);
@@ -1046,12 +1030,13 @@ void cycle_time_setting() // setting cycle_time
   while (count == 7 && !_Custom.TURN)
   {
     count = 9;
-    summry();
+    // summry();
   }
 }
 
 void turning_time_setting() // setting turning_time
 {
+
   while (count == 8)
   {
     while ((red.get_key() == 0x47) && (millis() - tick > 150))
@@ -1082,28 +1067,45 @@ void turning_time_setting() // setting turning_time
   }
 }
 
-
-
-void save_func()
+void Save_Panel()
 {
-  while (count == 10)
+  while (count == 9)
   {
     lcd.setCursor(0, 0);
     lcd.print("[SAVING DATA...]");
+    EEPROM.begin();
+    eeAddress = 0;
+    eeAddress += sizeof(float);
+    EEPROM.put(eeAddress, _Custom);
+    eeAddress = sizeof(float);
+    EEPROM.get(eeAddress, custom);
     delay(500);
+    ///////////////
+    periods[0] = RTC.second;
+    periods[1] = RTC.minuts;
+    periods[2] = RTC.hours;
+    for (uint8_t i = 3; i < (24 / custom.PERIOD) + 3; i++)
+    {
+      periods[i] = periods[i - 1] + custom.PERIOD;
+      if (periods[i] > 23)
+      {
+        periods[i] = periods[i] - 24;
+      }
+    }
+    eeAddress = sizeof(float) + sizeof(data_to_save);
+    EEPROM.put(eeAddress, periods);
+    EEPROM.get(eeAddress, periods);
+    //////////
+    lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print(" [SAVING DONE.] ");
-    // custom.SETTMP = (sp1) + (sp0);
-    // cycle_time = eeprom.read(0x50, 2);
-    // turning_time = (sp1) + (sp0);
-    // turning_time /= 100;
+    lcd.print(" [SAVING DONE!] ");
     sw = 0;
     lc1 = 0;
     count = 0;
     stable = 0;
     x = 0;
-    // limit_up = _Custom.TMPHI;
-    // limit_dn = _Custom.TMPLO;
+    limit_up = custom.TMPHI;
+    limit_dn = custom.TMPLO;
     alarm(2);
     lcd.clear();
   }
@@ -1243,7 +1245,7 @@ void loop()
   {
     alar_count = 0;
   }
-  /////there is conflict with Rtc after 15 minuts becuse [i2c address of FD560 = i2c address of DS3231 ](on the same pins)
+  //there is conflict with Rtc after 15 minuts becuse [i2c address of FD560 = i2c address of DS3231 ](on the same pins)
   while ((red.get_key() == 0x7F) && !lc1) ///set key=7f on press,3f on relesed k1+k2(dual keys)(manu)
   {
     zeroticks();
@@ -1255,11 +1257,12 @@ void loop()
         keystat = 1;
         if ((red.get_key() == 0x7F) && !lc1)
         {
+          manu_counter = millis();
+          lc1 = 1;
           digitalWrite(heater, 0);
           hum_trig = 0;
           sht31.Break();
           memcpy((void *)&_Custom, (void *)&custom, sizeof(_Custom)); ///
-          lc1 = 1;
           sw = 1;
           lcd.clear();
           count = 1;
@@ -1272,10 +1275,8 @@ void loop()
           turningSetting();
           cycle_time_setting();
           turning_time_setting();
-          // manu2();
-          // manu3();
-          summry();
-          save_func();
+          // summry();
+          Save_Panel();
         }
       }
     }
@@ -1294,13 +1295,13 @@ void loop()
     t = 0;
   }
 
-  if ((red.get_key() == 0x47)) ///Preview screen
-  {
-    lcd.clear();
-    preview();
-    delay(4000);
-    lcd.clear();
-  }
+  // if ((red.get_key() == 0x47)) ///Preview screen
+  // {
+  //   lcd.clear();
+  //   preview();
+  //   delay(4000);
+  //   lcd.clear();
+  // }
 
   manual_turn();
 
@@ -1316,7 +1317,7 @@ void loop()
 
   // limit_warning();
 
-  saving_data();
+  Saving_data_Web();
 }
 
 ISR(TIMER1_COMPA_vect)
@@ -1325,4 +1326,14 @@ ISR(TIMER1_COMPA_vect)
   hum_trig++;
   rtcRead();
   update_data();
+  if ((millis() - manu_counter >= (180000)) && (lc1)) ///3 minuts
+  {
+    manu_counter = millis();
+    lc1 = 0;
+    stable = 0;
+    x = 0;
+    lcd.clear();
+    sw = 0;
+    count = 0;
+  }
 }
