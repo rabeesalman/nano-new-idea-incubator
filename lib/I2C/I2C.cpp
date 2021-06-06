@@ -105,21 +105,21 @@ byte I2C::read(byte M_add, byte s_add)
                 del();
                 stop_signal();
             }
-            else
-            {
-                stop_signal();
-                Serial.print("nackn when read");
-            }
+            // else
+            // {
+            //     stop_signal();
+            //     Serial.print("nackn when read");
+            // }
         }
-        else
-        {
-            Serial.print("s_add fail");
-        }
+        // else
+        // {
+        //     Serial.print("s_add fail");
+        // }
     }
-    else
-    {
-        Serial.print("Module not respond");
-    }
+    // else
+    // {
+    //     Serial.print("Module not respond");
+    // }
     return xnum;
 }
 
@@ -140,19 +140,19 @@ void I2C::write(byte M_add, byte s_add, byte data)
                 stop_signal();
                 delay(5);
             }
-            else
-            {
-                Serial.print("break");
-            }
+            // else
+            // {
+            //     Serial.print("break");
+            // }
         }
-        else
-        {
-            Serial.print("add reg not resp.");
-        }
+        // else
+        // {
+        //     Serial.print("add reg not resp.");
+        // }
     }
-    else
-    {
-        Serial.print("module not respond");
-    }
+    // else
+    // {
+    //     Serial.print("module not respond");
+    // }
     stop_signal();
 }

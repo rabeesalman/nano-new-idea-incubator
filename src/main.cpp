@@ -1,15 +1,16 @@
+//pinout...
+//lcdi2c 5,6  red8,9;green11,10;heater 12,motor 13,buz A2,DHT22_data_pin A3
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <EEPROM.h>
 #include <FD650CA.h>
-#include <I2C.h>
+#include <DS3223rab.h>
 #include <LiquidCrystal_Software_I2C.h>
 #include <SHT31RAB.h>
 SHT31RAB sht31(3, 4);
 LiquidCrystal_I2C lcd(0x27, 16, 2, 5, 6); // Set the LCD address to 0x27 for a 16 chars and 2 line display
-I2C DS3231(8, 9);
-//pinout...
-//lcdi2c 5,6  red8,9;green11,10;heater 12,motor 13,buz A2,DHT22_data_pin A3
+DS3223rab DS3231(8, 9);
 FD650CA red(8, 9);
 FD650CA green(11, 10);
 //**********************
@@ -18,6 +19,7 @@ FD650CA green(11, 10);
 #define buz A2
 #define DHT22_data_pin A3
 #define SHT31_ADD 0x44
+uint8_t *ptr;
 double heat_factor = 5.0;
 double tmp_up;
 double tmp_dwn;
@@ -115,15 +117,6 @@ epromsaved custom = {0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 epromsaved _Custom = {0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; ////for copy original values before saving in panel
 
 epromsaved data_to_save = {0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-////**************
-#define DS3231_ADD 0x68 //0x68 same address for FD650
-#define SECOND 0        //the register address 0
-#define MINUT 1
-#define HOUR 2
-#define DAY_IN_WEEK 3
-#define DAY_IN_MONTH 4
-#define MONTH_IN_YEAR 5
-#define YEAR 6
 
 struct Clock
 {
@@ -136,83 +129,23 @@ struct Clock
   uint16_t year;
 } RTC;
 
+void get_time()
+{
+  ptr = DS3231.rtcRead();
+  RTC.second = *(ptr + 0);
+  RTC.minuts = *(ptr + 1);
+  RTC.hours = *(ptr + 2);
+  RTC.day_inweek = *(ptr + 3);
+  RTC.day_inmonth = *(ptr + 4);
+  RTC.month_inyear = *(ptr + 5);
+  RTC.year = *(ptr + 6) + 2000;
+}
+
 uint8_t periods[15] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; //[0]seconds,[1]minuts,[2]hours{instance of time now}
-
-uint8_t dectobcd(const uint8_t val)
-{
-  return ((val / 10 * 16) + (val % 10));
-}
-
-uint8_t bcdtodec(const uint8_t val)
-{
-  return ((val / 16 * 10) + (val % 16));
-}
 
 void zeroticks()
 {
   tick = millis();
-}
-
-void rtcRead()
-{
-  byte h = 0;
-  RTC.second = bcdtodec(DS3231.read(DS3231_ADD, SECOND));
-  RTC.minuts = bcdtodec(DS3231.read(DS3231_ADD, MINUT));
-  h = DS3231.read(DS3231_ADD, HOUR);
-  if (bitRead(h, 6))
-  {
-    // Serial.print("  12system");
-    if (bitRead(h, 5))
-    {
-      // Serial.print("PM");
-    }
-    else
-    {
-      // Serial.print("AM");
-    }
-    RTC.hours = bcdtodec(h & 0b00011111);
-  }
-  else
-  {
-    // Serial.print("  24system");
-    // Serial.print(h, BIN);
-    RTC.hours = bcdtodec(h & 0b00111111);
-  }
-  RTC.day_inweek = bcdtodec(DS3231.read(DS3231_ADD, DAY_IN_WEEK));
-  RTC.day_inmonth = bcdtodec(DS3231.read(DS3231_ADD, DAY_IN_MONTH));
-  RTC.month_inyear = bcdtodec(DS3231.read(DS3231_ADD, MONTH_IN_YEAR) & 0b00011111);
-  RTC.year = bcdtodec(DS3231.read(DS3231_ADD, YEAR)) + 2000;
-}
-
-void rtcWrite(uint8_t S, uint8_t M, uint8_t H, bool _12_, bool pm, uint8_t dinwek, uint8_t dinmoth, uint8_t monthiny, uint16_t yer)
-{
-  DS3231.write(DS3231_ADD, SECOND, dectobcd(S));
-  DS3231.write(DS3231_ADD, MINUT, dectobcd(M));
-  if (_12_)
-  {
-    if (H < 1 || H > 12)
-    {
-      H = 12;
-    }
-    H = dectobcd(H);
-    bitSet(H, 6);
-    pm ? bitSet(H, 5) : bitClear(H, 5);
-    DS3231.write(DS3231_ADD, HOUR, H);
-  }
-  else
-  {
-    if (H > 24 || H < 0)
-    {
-      H = 0;
-    }
-    H = H & 0b00111111;
-    DS3231.write(DS3231_ADD, HOUR, dectobcd(H));
-  }
-  DS3231.write(DS3231_ADD, DAY_IN_WEEK, dectobcd(dinwek));
-  DS3231.write(DS3231_ADD, DAY_IN_MONTH, dectobcd(dinmoth));
-  DS3231.write(DS3231_ADD, MONTH_IN_YEAR, dectobcd(monthiny & 0b00011111));
-  yer < 2000 ? yer = 2000 : yer = yer - 2000;
-  DS3231.write(DS3231_ADD, YEAR, dectobcd(yer));
 }
 
 void start_motor()
@@ -961,7 +894,6 @@ void hihumAlarm()
 
 void lohumAlarm()
 {
-
   while (count == 5)
   {
     _Custom.HLO = Plus_Minus(_Custom.HLO, _Custom.HHI - 5, 30);
@@ -1067,9 +999,24 @@ void turning_time_setting() // setting turning_time
   }
 }
 
-void Save_Panel()
+void Hatching_setting()
 {
   while (count == 9)
+  {
+    _Custom.HACHIN = Plus_Minus(_Custom.HACHIN, 32, 18);
+    lcd.setCursor(0, 0);
+    lcd.print("HACHING DAYS");
+    lcd.setCursor(0, 1);
+    lcd.print("    (");
+    lcd.print(_Custom.HACHIN);
+    lcd.print(")  ");
+    next_button(10);
+  }
+}
+
+void Save_Panel()
+{
+  while (count == 10)
   {
     lcd.setCursor(0, 0);
     lcd.print("[SAVING DATA...]");
@@ -1110,28 +1057,6 @@ void Save_Panel()
     lcd.clear();
   }
 }
-
-// void Resistor()
-// {
-//   int Vo = 0;
-//   Vo = analogRead(A0);
-//   x2 = 10000.0 * (1024.0 / (float)Vo - 1.0); /// NTC resistance connected between Vcc & ADC Pin
-// lcd.setCursor(0, 1);
-// lcd.print("A0= ");
-// lcd.print(x2);
-// lcd.print("  ");
-//   Vo = analogRead(A1);
-//   R2 = 10000.0 * (1024.0 / (float)Vo - 1.0); /// NTC resistance connected between Vcc & ADC Pin
-//   lcd.setCursor(0, 0);
-//   lcd.print("A1= ");
-//   lcd.print(R2);
-//   lcd.print("  ");
-//   while ((red.get_key() == 0x5f) && !lc2 && (millis() - tick > 200)) ///left key=5f
-//   {
-//     zeroticks();
-//     delay(1500);
-//   }
-// }
 
 void setup()
 {
@@ -1324,7 +1249,7 @@ ISR(TIMER1_COMPA_vect)
 {
   TCNT1 = 0;
   hum_trig++;
-  rtcRead();
+  get_time();
   update_data();
   if ((millis() - manu_counter >= (180000)) && (lc1)) ///3 minuts
   {

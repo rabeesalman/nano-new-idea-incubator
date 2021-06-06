@@ -157,26 +157,26 @@ void SHT31RAB::read(byte M_add, uint16_t command) ///Periodic Data Acquisition M
                     del();
                     stop_signal();
                 }
-                else
-                {
-                    stop_signal();
-                    Serial.print("nackn when read");
-                }
+                // else
+                // {
+                //     stop_signal();
+                //     Serial.print("nackn when read");
+                // }
             }
-            else
-            {
-                Serial.print("LSB AKN fail");
-            }
+            // else
+            // {
+            //     Serial.print("LSB AKN fail");
+            // }
         }
-        else
-        {
-            Serial.print("MSB AKN fail");
-        }
+        // else
+        // {
+        //     Serial.print("MSB AKN fail");
+        // }
     }
-    else
-    {
-        Serial.print("Module Address not respond");
-    }
+    // else
+    // {
+    //     Serial.print("Module Address not respond");
+    // }
     // Serial.print(temp);
     // Serial.print(" | ");
     // Serial.print(humidity);
