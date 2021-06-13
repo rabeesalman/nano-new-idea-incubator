@@ -11,12 +11,12 @@ private:
     float logR2, R2, _R1, T, _c1, _c2, _c3;
 
 public:
-    Stien(byte Therm_Pin,uint8_t vcc_pin, float Rdivid, float A, float B, float C) ////Constructor
+    Stien(byte Therm_Pin, uint8_t vcc_pin, float Rdivid, float A, float B, float C) ////Constructor
     {
         _Therm_Pin = Therm_Pin;
-        _vcc_pin=vcc_pin;
-        pinMode(_vcc_pin,OUTPUT);
-        digitalWrite(_vcc_pin,0);
+        _vcc_pin = vcc_pin;
+        pinMode(_vcc_pin, OUTPUT);
+        digitalWrite(_vcc_pin, 0);
         _R1 = Rdivid;
         _c1 = A;
         _c2 = B;

@@ -77,12 +77,10 @@ byte DS3223rab::read(byte M_add, byte s_add)
         Byt_txrx(s_add); //send specific address location
         if (!ackn())
         {
-            // M_add = (M_add << 1) + 1;
             start_signal(); //repeat start signal for reading
             Byt_txrx((M_add << 1) + 1);
             if (!ackn())
             {
-
                 bool x;
                 for (int i = 0; i < 8; i++) //read the incoming byte & save it to xnum
                 {

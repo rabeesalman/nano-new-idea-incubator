@@ -1,6 +1,14 @@
 //pinout...
 //lcdi2c 5,6  red8,9;green11,10;heater 12,motor 13,buz A2,DHT22_data_pin A3
 
+/*
+  top =   0x44(pressed)....0x04(relesed)[ ++]
+  right = 0x4C(pressed)....0x0C(relesed) [Next]
+  buttom= 0x4F(pressed)....0x0F(relesed) [--]
+  left=   0x47(pressed)....0x07(relesed)
+  top&right=   0x7C(pressed)....0x3C(relesed) [Setting Manue]
+  buttom&left= 0x7F(pressed)....0x07(relesed) [Clock Manue]
+  */
 #include <Arduino.h>
 #include <Wire.h>
 #include <EEPROM.h>
@@ -26,12 +34,12 @@ double tmp_dwn;
 float hum = 10.0;
 double area;
 bool st = 1, flag = 0;
-unsigned long previousMillis1 = 0.0;
+unsigned long previousMillis1 = 0;
 unsigned long tick = 0;
 bool lc1 = 0, lc2 = 0;
 /////////////////////////
 bool sw = 0;
-unsigned int cycle_time = 50;
+// unsigned int cycle_time = 50;
 float turning_time = 8.0;
 bool _enableRotate = 1;
 uint8_t count = 0;
@@ -47,7 +55,6 @@ const uint16_t t1_comp = 62500; //1sec =(1 sec)16M/256;
 // unsigned int checksum;
 float m_temp = 0.0;
 float factor = 0.0;
-double x2;
 bool t = 0;
 bool keystat = 0;
 //*****************************from arduino to esp
@@ -115,7 +122,6 @@ struct epromsaved
 //  {37.5f, 37.9f, 37.1f, 8, 70, 40, 21, 1};
 epromsaved custom = {0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 epromsaved _Custom = {0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; ////for copy original values before saving in panel
-
 epromsaved data_to_save = {0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 struct Clock
@@ -409,7 +415,7 @@ void humidity()
     //       databytes[j] |= 1;
     //   }
     // }
-    // m_temp = ((databytes[2] & 0x7F) * 256 + databytes[3]) / (float)10; //Extract Temperature
+    //m_temp = ((databytes[2] & 0x7F) * 256 + databytes[3]) / (float)10; //Extract Temperature
     // if ((databytes[2] & 0x80) > 0)
     // {
     //   m_temp = -m_temp; //MSB of Temperature gives it sign
@@ -536,7 +542,7 @@ void limit_warning()
 
       alarm(2);
 
-      while ((red.get_key() == 0x47) && (millis() - tick > 150))
+      while ((red.get_key() == 0x44) && (millis() - tick > 150))
       {
         zeroticks();
         stable = 0;
@@ -549,8 +555,9 @@ void limit_warning()
 
 void manual_turn()
 {
+  bool sta = 1;
   zeroticks();
-  while ((red.get_key() == 0x5f) && !lc2) ///left key=5f
+  while ((red.get_key() == 0x47) && !lc2) ///left key=5f
   {
     if ((millis() - tick > 100))
     {
@@ -567,24 +574,25 @@ void manual_turn()
     lcd.print("Rotate Motor");
     lcd.setCursor(2, 1);
     lcd.print("Press Down V");
-    while ((red.get_key() == 0x57) && (millis() - tick > 50)) ////down key =57 pressed
+    while ((red.get_key() == 0x4F) && (millis() - tick > 50)) ////down key =4F pressed
     {
       zeroticks();
       digitalWrite(motor, 1);
     }
-    while ((red.get_key() == 0x17) && (millis() - tick > 50)) ////down key =17 relesed
+    while ((red.get_key() == 0x0F) && (millis() - tick > 50)) ////down key =0F relesed
     {
       zeroticks();
       digitalWrite(motor, 0);
     }
 
-    while ((red.get_key() == 0x5f) && (millis() - tick > 100))
+    while ((red.get_key() == 0x47) && (millis() - tick > 100) && sta)
     {
       // zeroticks();
       _enableRotate = 1;
       lc2 = 0;
       digitalWrite(motor, 0);
       alarm(1);
+      sta = 0;
     }
   }
 }
@@ -601,8 +609,9 @@ void display()
     }
     else
       lcd.print(tmp_up);
-    // lcd.print(x2);
     lcd.print("/");
+    lcd.print(RTC.hours);
+    lcd.print(":");
     lcd.print(RTC.minuts);
     lcd.print(":");
     if (RTC.second == 0)
@@ -619,25 +628,36 @@ void display()
     {
       lcd.print("OPEN");
     }
-    else
+    else if (custom.TURN)
+    {
       lcd.print(m_temp);
-    lcd.print("/");
-    lcd.print(HOR);
-    lcd.print(":");
-    lcd.print(MIN);
-    lcd.print(":");
-    lcd.print(SEC);
-    // lcd.print("SP:");
-    // lcd.print(custom.SETTMP);
-    // lcd.print("/");
-    // lcd.print(time_elapsed);
-    // lcd.print("/");
+      lcd.print("/");
+      lcd.print(HOR);
+      lcd.print(":");
+      lcd.print(MIN);
+      lcd.print(":");
+      lcd.print(SEC);
+      if (SEC == 0)
+      {
+        lcd.print("0   ");
+      }
+      else
+      {
+        lcd.print(SEC);
+      }
+    }
+    else
+    {
+      lcd.print(m_temp);
+      lcd.print("/");
+      lcd.print("STOPED!");
+    }
   }
 }
 
 uint8_t Plus_Minus(uint8_t featu, uint8_t limhi, uint8_t limlo)
 {
-  while ((red.get_key() == 0x47) && (millis() - tick > 150))
+  while ((red.get_key() == 0x44) && (millis() - tick > 150))
   {
     zeroticks();
     featu++;
@@ -646,7 +666,7 @@ uint8_t Plus_Minus(uint8_t featu, uint8_t limhi, uint8_t limlo)
       featu = limhi;
     }
   }
-  while ((red.get_key() == 0x57) && (millis() - tick > 150))
+  while ((red.get_key() == 0x4F) && (millis() - tick > 150))
   {
     zeroticks();
     featu--;
@@ -660,7 +680,7 @@ uint8_t Plus_Minus(uint8_t featu, uint8_t limhi, uint8_t limlo)
 
 void next_button(uint8_t x) //next button
 {
-  while ((red.get_key() == 0x4f) && (millis() - tick > 200)) //next button
+  while ((red.get_key() == 0x4C) && (millis() - tick > 200)) //next button
   {
     zeroticks();
     lcd.clear();
@@ -705,15 +725,33 @@ void sub_disp()
   lcd.print("C");
 }
 
-void manu1() // setting set point
+void Previous()
+{
+  while ((red.get_key() == 0x47) && (millis() - tick > 200))
+  {
+    zeroticks();
+    lcd.clear();
+    count--;
+    if (count < 1)
+    {
+      sw = 0;
+      lc1 = 0;
+      count = 0;
+      stable = 0;
+      x = 0;
+    }
+    alarm(1);
+  }
+}
+
+void Set_temp() // setting set point
 {
   zeroticks();
   sub_disp();
   bool a = 0;
-
   while (count == 1)
   {
-    if ((red.get_key() == 0x47))
+    if ((red.get_key() == 0x44))
     {
 
       if ((millis() - tick < 1000))
@@ -721,7 +759,7 @@ void manu1() // setting set point
         a = 0;
         zeroticks();
       }
-      while (a && (red.get_key() == 0x47))
+      while (a && (red.get_key() == 0x44))
       {
         _Custom.SETTMP += 0.1;
 
@@ -736,7 +774,7 @@ void manu1() // setting set point
           zeroticks();
         }
       }
-      while (!a && (red.get_key() == 0x47))
+      while (!a && (red.get_key() == 0x44))
       {
         _Custom.SETTMP += 0.1;
 
@@ -761,30 +799,27 @@ void manu1() // setting set point
       }
     }
     ////*********
-    if ((red.get_key() == 0x57))
+    if ((red.get_key() == 0x4F))
     {
-
       if ((millis() - tick < 1000))
       {
         a = 0;
       }
-      while (a && (red.get_key() == 0x57))
+      while (a && (red.get_key() == 0x4F))
       {
         _Custom.SETTMP -= 0.1;
         while (_Custom.SETTMP < 34.0)
         {
           _Custom.SETTMP = 34.0;
         }
-
         sub_disp();
-
         if ((red.get_key() == 0x17))
         {
           a = 0;
           zeroticks();
         }
       }
-      while (!a && (red.get_key() == 0x57))
+      while (!a && (red.get_key() == 0x4F))
       {
         delay(300);
         _Custom.SETTMP -= 0.1;
@@ -792,9 +827,7 @@ void manu1() // setting set point
         {
           _Custom.SETTMP = 20.5;
         }
-
         sub_disp();
-
         if ((millis() - tick > 2000))
         {
           a = 1;
@@ -807,15 +840,16 @@ void manu1() // setting set point
       }
     }
     next_button(2);
+    Previous();
   }
 }
 
 void hitmpAlarm()
 {
-
   while (count == 2)
   {
-    while ((red.get_key() == 0x47) && (millis() - tick > 150))
+    
+    while ((red.get_key() == 0x44) && (millis() - tick > 150))
     {
       zeroticks();
       _Custom.TMPHI += 0.05;
@@ -824,7 +858,7 @@ void hitmpAlarm()
         _Custom.TMPHI = _Custom.SETTMP + 1.5;
       }
     }
-    while ((red.get_key() == 0x57) && (millis() - tick > 150))
+    while ((red.get_key() == 0x4F) && (millis() - tick > 150))
     {
       zeroticks();
       _Custom.TMPHI -= 0.05;
@@ -840,6 +874,7 @@ void hitmpAlarm()
     lcd.print(_Custom.TMPHI);
     lcd.print(") C  ");
     next_button(3);
+    Previous();
   }
 }
 
@@ -848,7 +883,7 @@ void lotmpAlarm()
 
   while (count == 3)
   {
-    while ((red.get_key() == 0x47) && (millis() - tick > 150))
+    while ((red.get_key() == 0x44) && (millis() - tick > 150))
     {
       zeroticks();
       _Custom.TMPLO += 0.05;
@@ -857,7 +892,7 @@ void lotmpAlarm()
         _Custom.TMPLO = _Custom.SETTMP - 0.25;
       }
     }
-    while ((red.get_key() == 0x57) && (millis() - tick > 150))
+    while ((red.get_key() == 0x4F) && (millis() - tick > 150))
     {
       zeroticks();
       _Custom.TMPLO -= 0.05;
@@ -873,12 +908,12 @@ void lotmpAlarm()
     lcd.print(_Custom.TMPLO);
     lcd.print(") C  ");
     next_button(4);
+    Previous();
   }
 }
 
 void hihumAlarm()
 {
-
   while (count == 4)
   {
     _Custom.HHI = Plus_Minus(_Custom.HHI, 80, 30);
@@ -889,6 +924,7 @@ void hihumAlarm()
     lcd.print(_Custom.HHI);
     lcd.print(")%    ");
     next_button(5);
+     Previous();
   }
 }
 
@@ -904,15 +940,15 @@ void lohumAlarm()
     lcd.print(_Custom.HLO);
     lcd.print(")%  ");
     next_button(6);
+     Previous();
   }
 }
 
 void turningSetting()
 {
-
   while (count == 6)
   {
-    while ((red.get_key() == 0x47) && (millis() - tick > 150))
+    while ((red.get_key() == 0x44) && (millis() - tick > 150))
     {
       zeroticks();
       while (_Custom.TURN)
@@ -920,7 +956,7 @@ void turningSetting()
         _Custom.TURN = !_Custom.TURN;
       }
     }
-    while ((red.get_key() == 0x57) && (millis() - tick > 150))
+    while ((red.get_key() == 0x4F) && (millis() - tick > 150))
     {
       zeroticks();
       while (!_Custom.TURN)
@@ -942,12 +978,12 @@ void turningSetting()
     }
 
     next_button(7);
+     Previous();
   }
 }
 
 void cycle_time_setting() // setting cycle_time
 {
-
   while (count == 7 && _Custom.TURN)
   {
     _Custom.PERIOD = Plus_Minus(_Custom.PERIOD, 12, 2);
@@ -958,6 +994,7 @@ void cycle_time_setting() // setting cycle_time
     lcd.print(_Custom.PERIOD);
     lcd.print(")HOURS");
     next_button(8);
+     Previous();
   }
   while (count == 7 && !_Custom.TURN)
   {
@@ -968,10 +1005,9 @@ void cycle_time_setting() // setting cycle_time
 
 void turning_time_setting() // setting turning_time
 {
-
   while (count == 8)
   {
-    while ((red.get_key() == 0x47) && (millis() - tick > 150))
+    while ((red.get_key() == 0x44) && (millis() - tick > 150))
     {
       zeroticks();
       turning_time += 0.25;
@@ -980,7 +1016,7 @@ void turning_time_setting() // setting turning_time
         turning_time = 9.0;
       }
     }
-    while ((red.get_key() == 0x57) && (millis() - tick > 150))
+    while ((red.get_key() == 0x4F) && (millis() - tick > 150))
     {
       zeroticks();
       turning_time -= 0.25;
@@ -996,6 +1032,7 @@ void turning_time_setting() // setting turning_time
     lcd.print(turning_time);
     lcd.print("Second");
     next_button(9);
+     Previous();
   }
 }
 
@@ -1011,6 +1048,7 @@ void Hatching_setting()
     lcd.print(_Custom.HACHIN);
     lcd.print(")  ");
     next_button(10);
+      Previous();
   }
 }
 
@@ -1028,6 +1066,7 @@ void Save_Panel()
     EEPROM.get(eeAddress, custom);
     delay(500);
     ///////////////
+    get_time();
     periods[0] = RTC.second;
     periods[1] = RTC.minuts;
     periods[2] = RTC.hours;
@@ -1041,11 +1080,13 @@ void Save_Panel()
     }
     eeAddress = sizeof(float) + sizeof(data_to_save);
     EEPROM.put(eeAddress, periods);
+    delay(500);
     EEPROM.get(eeAddress, periods);
     //////////
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print(" [SAVING DONE!] ");
+    delay(1000);
     sw = 0;
     lc1 = 0;
     count = 0;
@@ -1063,7 +1104,7 @@ void setup()
   // rtcWrite(30, 43, 8, 0, 0, 1, 22, 5, 2021);
   lcd.init();
   lcd.backlight();
-  Serial.begin(9600);
+  // Serial.begin(9600);
   EEPROM.begin();
   //////////////////////////
   // eeAddress += sizeof(float);
@@ -1076,7 +1117,9 @@ void setup()
     periods[i] = 0;
   }
   eeAddress = sizeof(float) + sizeof(data_to_save);
+  delay(200);
   EEPROM.get(eeAddress, periods);
+  delay(200);
   Wire.begin(8);
   Wire.onReceive(receiveEvent);
   Wire.onRequest(on_Request);
@@ -1107,7 +1150,6 @@ void setup()
   // turning_time = (sp1) + (sp0);
   // turning_time /= 100;
   //**************************************
-  zeroticks();
   limit_up = custom.TMPHI;
   limit_dn = custom.TMPLO;
   tmp_up = stien_three(A1, 10000.0, 1.286986010E-03, 2.067415798E-04, 1.923761216E-07); ///first one epoxy 1500 dinar ok
@@ -1131,7 +1173,7 @@ void setup()
   TIMSK1 = (1 << OCIE1A); ///Set the timer 1 interrupt bit enable
   //////
   sei(); //////Enable the Gloable interrupt
-  delay(300);
+  zeroticks();
 }
 
 void loop()
@@ -1171,7 +1213,7 @@ void loop()
     alar_count = 0;
   }
   //there is conflict with Rtc after 15 minuts becuse [i2c address of FD560 = i2c address of DS3231 ](on the same pins)
-  while ((red.get_key() == 0x7F) && !lc1) ///set key=7f on press,3f on relesed k1+k2(dual keys)(manu)
+  while ((red.get_key() == 0x7C) && !lc1) ///set key=7f on press,3f on relesed k1+k2(dual keys)(Setting manue)
   {
     zeroticks();
     while (!keystat)
@@ -1180,47 +1222,138 @@ void loop()
       {
         zeroticks();
         keystat = 1;
-        if ((red.get_key() == 0x7F) && !lc1)
+        if ((red.get_key() == 0x7C) && !lc1)
         {
           manu_counter = millis();
           lc1 = 1;
           digitalWrite(heater, 0);
           hum_trig = 0;
           sht31.Break();
-          memcpy((void *)&_Custom, (void *)&custom, sizeof(_Custom)); ///
+          memcpy((void *)&_Custom, (void *)&custom, sizeof(_Custom)); 
           sw = 1;
           lcd.clear();
           count = 1;
           alarm(1);
-          manu1();
-          hitmpAlarm();
-          lotmpAlarm();
-          hihumAlarm();
-          lohumAlarm();
-          turningSetting();
-          cycle_time_setting();
-          turning_time_setting();
-          // summry();
-          Save_Panel();
         }
       }
     }
     keystat = 0;
   }
+
+  switch (count)
+  {
+  case 1:
+    Set_temp();
+    break;
+  case 2:
+    hitmpAlarm();
+    break;
+  case 3:
+    lotmpAlarm();
+    break;
+  case 4:
+    hihumAlarm();
+    break;
+  case 5:
+    lohumAlarm();
+    break;
+  case 6:
+    turningSetting();
+    break;
+  case 7:
+    cycle_time_setting();
+    break;
+  case 8:
+    turning_time_setting();
+    break;
+  case 9:
+    Hatching_setting();
+    break;
+  case 10:
+    Save_Panel();
+    break;
+  default:
+    break;
+  }
+
+  while ((red.get_key() == 0x7F) && !lc2) ///Clock setting
+  {
+    zeroticks();
+    while (!keystat)
+    {
+      if ((millis() - tick > 500))
+      {
+        zeroticks();
+        uint8_t subhour, submin, subsec;
+        subhour = RTC.hours;
+        submin = RTC.minuts;
+        subsec = RTC.second;
+        lcd.clear();
+        alarm(1);
+        lc2 = 1;
+        count = 0;
+        while (count == 0)
+        {
+          lcd.setCursor(0, 0);
+          lcd.print(" Clock Set");
+          lcd.setCursor(4, 1);
+          subhour = Plus_Minus(subhour, 23, 0);
+          if (subhour > 23)
+          {
+            subhour = 0;
+          }
+          lcd.print("[");
+          lcd.print(subhour);
+          lcd.print("]");
+          lcd.print(":");
+          lcd.print(submin);
+          lcd.print(":");
+          lcd.print(subsec);
+          next_button(1);
+        }
+        while (count == 1)
+        {
+          lcd.setCursor(0, 0);
+          lcd.print(" Clock Set");
+          lcd.setCursor(4, 1);
+          submin = Plus_Minus(submin, 59, 0);
+          if (submin > 59)
+          {
+            submin = 0;
+          }
+          lcd.print(subhour);
+          lcd.print(":");
+          lcd.print("[");
+          lcd.print(submin);
+          lcd.print("]");
+          lcd.print(":");
+          lcd.print(subsec);
+          // next_button(2);
+          while ((red.get_key() == 0x47) && (millis() - tick > 100) && lc2)
+          {
+            alarm(1);
+            lc2 = 0;
+          }
+        }
+      }
+    }
+    keystat = 0;
+  }
+
   /////////////////////////////////
-  while (bitRead(red.get_key(), 6) && !t) ///Bit 6 of the return byte is the status bit detecting if key is pressed or relesed
-  {
-    // Serial.print(String((red.get_key()), HEX) + "H | "); ///When key Pressed
-    t = 1;
-  }
+  // while (bitRead(red.get_key(), 6) && !t) ///Bit 6 of the return byte is the status bit detecting if key is pressed or relesed
+  // {
+  //   Serial.print(String((red.get_key()), HEX) + "H | "); ///When key Pressed
+  //   t = 1;
+  // }
 
-  while (!bitRead(red.get_key(), 6) && t)
-  {
-    // Serial.println(String((red.get_key()), HEX) + "H"); ///When key Relesed
-    t = 0;
-  }
+  // while (!bitRead(red.get_key(), 6) && t)
+  // {
+  //   Serial.println(String((red.get_key()), HEX) + "H"); ///When key Relesed
+  //   t = 0;
+  // }
 
-  // if ((red.get_key() == 0x47)) ///Preview screen
+  // if ((red.get_key() == 0x44)) ///Preview screen
   // {
   //   lcd.clear();
   //   preview();
@@ -1228,15 +1361,13 @@ void loop()
   //   lcd.clear();
   // }
 
-  manual_turn();
+  // manual_turn();
 
   humidity();
 
   display();
 
   SevenSegmentdisplay();
-
-  Cycle();
 
   start_motor();
 
@@ -1250,6 +1381,7 @@ ISR(TIMER1_COMPA_vect)
   TCNT1 = 0;
   hum_trig++;
   get_time();
+  Cycle();
   update_data();
   if ((millis() - manu_counter >= (180000)) && (lc1)) ///3 minuts
   {

@@ -37,10 +37,8 @@ bool SHT31RAB::ackn()
     del();
     while (cc)
     {
-        // Serial.print(" ok ");Serial.print(w);
         cc = digitalRead(da);
     }
-    // w++;
     digitalWrite(cl, LOW);
     del();
     return cc;
@@ -58,7 +56,7 @@ void SHT31RAB::nack()
 
 void SHT31RAB::Byt_txrx(byte info)
 {
-    for (unsigned char i = 0; i < 8; i++)
+    for (byte i = 0; i < 8; i++)
     {
         digitalWrite(da, bitRead(info, 7 - i));
         del();
