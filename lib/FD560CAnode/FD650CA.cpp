@@ -16,7 +16,7 @@ void FD650CA::start()
 
 void FD650CA::del()
 {
-    delayMicroseconds(10); /////2(5micro =100khz)
+    delayMicroseconds(5); /////2(5micro =100khz)
 }
 
 void FD650CA::stop()
@@ -84,7 +84,7 @@ void FD650CA::allOn_bri(byte b, bool EN_DISABLE)
     for (uint8_t i = 0; i < 4; i++)
     {
         start();
-        write_byte(0x48 + i * 2);           //0x48 is module address for(Setting the digits befor work) 
+        write_byte(0x48 + i * 2);           //0x48 is module address for(Setting the digits befor work)
         write_byte(EN_DISABLE | bright[b]); //display command settings(turning on display & Brightness level)
         stop();
     }
@@ -145,7 +145,7 @@ void FD650CA::clean()
 void FD650CA::sendtoled(byte _SDAta, byte this_digit)
 {
     start();
-    write_byte(0x68+ (this_digit*2 )); ///0x68 is the address of the first digit not the address of the module
+    write_byte(0x68 + (this_digit * 2)); ///0x68 is the address of the first digit not the address of the module
     write_byte(_SDAta);                  //0x68 +2 is the second digit address//الكفرة هو نفس عنوان RTC
     stop();
 }
@@ -158,7 +158,6 @@ bool FD650CA::ackn()
     del();
     while (cc)
     {
-        //  Serial.print(" ok ");
         cc = digitalRead(_SDA);
     }
     digitalWrite(_SCL, LOW);

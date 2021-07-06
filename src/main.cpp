@@ -1,6 +1,5 @@
 //pinout...
 //lcdi2c 5,6  red8,9;green11,10;heater 12,motor 13,buz A2,DHT22_data_pin A3
-
 /*
   top =   0x44(pressed)....0x04(relesed)[ ++]
   right = 0x4C(pressed)....0x0C(relesed) [Next]
@@ -8,7 +7,7 @@
   left=   0x47(pressed)....0x07(relesed)
   top&right=   0x7C(pressed)....0x3C(relesed) [Setting Manue]
   buttom&left= 0x7F(pressed)....0x07(relesed) [Clock Manue]
-  */
+*/
 #include <Arduino.h>
 #include <Wire.h>
 #include <EEPROM.h>
@@ -28,26 +27,29 @@ FD650CA green(11, 10);
 #define DHT22_data_pin A3
 #define SHT31_ADD 0x44
 uint8_t *ptr;
-double heat_factor = 5.0;
-double tmp_up;
-double tmp_dwn;
+float heat_factor = 5.0;
+float tmp_up;
+float tmp_dwn;
 float hum = 10.0;
-double area;
+float area;
 bool st = 1, flag = 0;
+bool Setting_Mode = 0, lc2 = 0;
+bool sw = 0;
+bool stable = 0;
+bool x = 0;
+bool t = 0;
+bool keystat = 0;
+bool save_signal = 0;
 unsigned long previousMillis1 = 0;
 unsigned long tick = 0;
-bool lc1 = 0, lc2 = 0;
 /////////////////////////
-bool sw = 0;
-// unsigned int cycle_time = 50;
 float turning_time = 8.0;
 bool _enableRotate = 1;
 uint8_t count = 0;
+uint8_t clock_manue = 0;
 uint8_t counter = 0;
-bool stable = 0;
 uint8_t alar_count = 0;
-double limit_up, limit_dn;
-bool x = 0;
+float limit_up, limit_dn;
 uint8_t hum_trig = 0;
 const uint16_t t1_comp = 62500; //1sec =(1 sec)16M/256;
 // boolean result[41];             //for DHT11
@@ -55,21 +57,19 @@ const uint16_t t1_comp = 62500; //1sec =(1 sec)16M/256;
 // unsigned int checksum;
 float m_temp = 0.0;
 float factor = 0.0;
-bool t = 0;
-bool keystat = 0;
 //*****************************from arduino to esp
 bool fan = true, water = true, door = false, eg = false, lamp = false;
 char arryx[31];
 char _data[sizeof(float)];
 float g[3];
 int eeAddress = 0;
-bool save_signal = 0;
 unsigned long sig = 0;
 bool pm = 0;
 unsigned long turnTimeCounter = 0;
-bool corrector = 0;
-int SEC = 0, MIN = 0, HOR = 0;
+bool Motor_Signal = 0;
+uint8_t SEC = 0, MIN = 0, HOR = 0;
 unsigned long manu_counter = 3000;
+uint8_t periods[15] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; //[0]seconds,[1]minuts,[2]hours{instance of time now}
 
 struct data_tobe_send ////sending live data to esp8266(size 16 byte)
 {
@@ -135,7 +135,7 @@ struct Clock
   uint16_t year;
 } RTC;
 
-void get_time()
+void Get_Time()
 {
   ptr = DS3231.rtcRead();
   RTC.second = *(ptr + 0);
@@ -147,24 +147,22 @@ void get_time()
   RTC.year = *(ptr + 6) + 2000;
 }
 
-uint8_t periods[15] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; //[0]seconds,[1]minuts,[2]hours{instance of time now}
-
 void zeroticks()
 {
   tick = millis();
 }
 
-void start_motor()
+void Motor_Control()
 {
   if (millis() > (turning_time * 3000)) ///to prevent turning after reset arduino (turning_time=8sec)
   {
-    if (millis() - turnTimeCounter < (turning_time * 1000))
+    if ((millis() - turnTimeCounter) < (turning_time * 1000))
     {
       digitalWrite(motor, 1);
     }
     else
     {
-      corrector = 0;
+      Motor_Signal = 0;
       digitalWrite(motor, 0);
     }
   }
@@ -172,7 +170,6 @@ void start_motor()
 
 void turning_tone()
 {
-
   pinMode(buz, OUTPUT);
   tone(buz, 900, 150);
   delay(225);
@@ -206,7 +203,7 @@ void turning_tone()
   // delay(45);
 }
 
-void Cycle()
+void Time_Remain()
 {
   if (custom.TURN)
   {
@@ -218,11 +215,11 @@ void Cycle()
         HOR = periods[i] - RTC.hours;
         MIN = periods[1] + (59 - periods[1]) - RTC.minuts;
         SEC = periods[0] + (59 - periods[0]) - RTC.second;
-        if (HOR == 0 && MIN == 0 && SEC == 0 && !corrector)
+        if (HOR == 0 && MIN == 0 && SEC == 0 && !Motor_Signal)
         {
           turning_tone();
           turnTimeCounter = millis();
-          corrector = 1;
+          Motor_Signal = 1;
         }
       }
     }
@@ -264,12 +261,12 @@ void Saving_data_Web()
     eeAddress = sizeof(float) + sizeof(data_to_save);
     EEPROM.put(eeAddress, periods);
     EEPROM.get(eeAddress, periods);
-    for (uint8_t i = 0; i < sizeof(periods); i++)
-    {
-      Serial.print(periods[i]);
-      Serial.print(" | ");
-    }
-    Serial.println("");
+    // for (uint8_t i = 0; i < sizeof(periods); i++)
+    // {
+    //   Serial.print(periods[i]);
+    //   Serial.print(" | ");
+    // }
+    // Serial.println("");
 
     // float *p1;
     // // take address of custom and assign to the pointer
@@ -344,13 +341,13 @@ void receiveEvent(int howMany)
     data_to_save.PERIOD = char(arryx[18]); //IN HOURS
     data_to_save.HACHIN = char(arryx[19]);
     data_to_save.TURN = char(arryx[20]);
-
     ///////////////////////////////////////
     data_to_save.YEAR1 = char(arryx[21]);
     data_to_save.MONTH1 = char(arryx[22]);
     data_to_save.DAY1 = char(arryx[23]);
     data_to_save.HOUR1 = char(arryx[24]);
     data_to_save.MINUT1 = char(arryx[25]);
+
     if (char(arryx[24]) > 12)
     {
       pm = 1;
@@ -372,12 +369,14 @@ void receiveEvent(int howMany)
   }
 }
 
-double stien_three(byte Thermistor_Pin, float Rdivid, float A, float B, float C)
+float stien_three(byte Thermistor_Pin, float Rdivid, float A, float B, float C)
 {
   int Vo;
-  double lnR2, R2, T;
-  double sum = 0.0;
-  for (uint8_t i = 0; i < 100; i++)
+  double lnR2, R2;
+  float T;
+  float sum = 0.0;
+  uint8_t iteration = 10;
+  for (uint8_t i = 0; i < iteration; i++)
   {
     Vo = analogRead(Thermistor_Pin);
     R2 = Rdivid * (1024.0 / (float)Vo - 1.0); /// NTC resistance connected between Vcc & ADC Pin
@@ -386,11 +385,11 @@ double stien_three(byte Thermistor_Pin, float Rdivid, float A, float B, float C)
     T = (T - 273.15);
     sum = T + sum;
   }
-  T = sum / 100.00;
+  T = sum / float(iteration);
   return T;
 }
 
-void humidity()
+void Humidity()
 {
   if (hum_trig >= 1)
   {
@@ -433,7 +432,7 @@ void humidity()
   }
 }
 
-void update_data()
+void Update_data()
 {
   // tmp_dwn = stien_three(A0, 10000.0, 9.2842025712E-04, 2.4620685389E-04, 1.9112690439E-07) + 0.08; //9965.0 ///Black wire.Steel old (ok)
   //*************************************************************************************************
@@ -441,6 +440,15 @@ void update_data()
   // tmp_up = stien_three(A1, 10000.0, 7.8786994030E-04, 2.8985556847E-04, -1.3697290359E-07); // Black wire epoxy 10k small baghdad
   // tmp_up = stien_three(A1, 10000.0, 1.3411013609E-03, 1.7326863945E-04, 5.1373528749E-07); ////white wire epoxy 10k baghdad (ok)
   tmp_up = stien_three(A1, 10000.0, 1.286986010E-03, 2.067415798E-04, 1.923761216E-07); ///first one epoxy 1500 dinar ok
+  //  if (hum_trig >= 1)
+  // {
+  //    sht31.read(SHT31_ADD, 0x2220);
+  //   m_temp = sht31.tempResult;
+  //   hum = sht31.humidityResult;
+  //   area = custom.SETTMP - m_temp;
+  //   //*************************************
+  //   hum_trig = 0;
+  // }
   // area = custom.SETTMP - tmp_dwn;
   // data.TEMP = float(tmp_dwn);
   data.TEMP = m_temp;
@@ -471,7 +479,7 @@ void update_data()
   data.Ehours = HOR;
 }
 
-void SevenSegmentdisplay()
+void SevenSegmentDisplay()
 {
   green.shownum(2, int(hum * 100) / 10 % 10, 0);
   green.shownum(1, int(hum * 100) / 100 % 10, 1);
@@ -553,51 +561,54 @@ void limit_warning()
   }
 }
 
-void manual_turn()
+void Manual_Turn()
 {
-  bool sta = 1;
-  zeroticks();
-  while ((red.get_key() == 0x47) && !lc2) ///left key=5f
+  if (!sw)
   {
-    if ((millis() - tick > 100))
+    bool sta = 1;
+    zeroticks();
+    while ((red.get_key() == 0x47) && !lc2) //left key=0x47H
     {
-      zeroticks();
-      lcd.clear();
-      alarm(1);
-      _enableRotate = 0;
-      lc2 = 1;
+      if ((millis() - tick > 100))
+      {
+        zeroticks();
+        lcd.clear();
+        alarm(1);
+        _enableRotate = 0;
+        lc2 = 1;
+      }
     }
-  }
-  while (lc2)
-  {
-    lcd.setCursor(2, 0);
-    lcd.print("Rotate Motor");
-    lcd.setCursor(2, 1);
-    lcd.print("Press Down V");
-    while ((red.get_key() == 0x4F) && (millis() - tick > 50)) ////down key =4F pressed
+    while (lc2)
     {
-      zeroticks();
-      digitalWrite(motor, 1);
-    }
-    while ((red.get_key() == 0x0F) && (millis() - tick > 50)) ////down key =0F relesed
-    {
-      zeroticks();
-      digitalWrite(motor, 0);
-    }
+      lcd.setCursor(2, 0);
+      lcd.print("Rotate Motor");
+      lcd.setCursor(2, 1);
+      lcd.print("Press Down V");
+      while ((red.get_key() == 0x4F) && (millis() - tick > 50)) ////down key =4F pressed
+      {
+        zeroticks();
+        digitalWrite(motor, 1);
+      }
+      while ((red.get_key() == 0x0F) && (millis() - tick > 50)) ////down key =0F relesed
+      {
+        zeroticks();
+        digitalWrite(motor, 0);
+      }
 
-    while ((red.get_key() == 0x47) && (millis() - tick > 100) && sta)
-    {
-      // zeroticks();
-      _enableRotate = 1;
-      lc2 = 0;
-      digitalWrite(motor, 0);
-      alarm(1);
-      sta = 0;
+      while ((red.get_key() == 0x47) && (millis() - tick > 100) && sta)
+      {
+        // zeroticks();
+        _enableRotate = 1;
+        lc2 = 0;
+        digitalWrite(motor, 0);
+        alarm(1);
+        sta = 0;
+      }
     }
   }
 }
 
-void display()
+void Display()
 {
   if (!sw)
   {
@@ -735,7 +746,7 @@ void Previous()
     if (count < 1)
     {
       sw = 0;
-      lc1 = 0;
+      Setting_Mode = 0;
       count = 0;
       stable = 0;
       x = 0;
@@ -848,7 +859,7 @@ void hitmpAlarm()
 {
   while (count == 2)
   {
-    
+
     while ((red.get_key() == 0x44) && (millis() - tick > 150))
     {
       zeroticks();
@@ -924,7 +935,7 @@ void hihumAlarm()
     lcd.print(_Custom.HHI);
     lcd.print(")%    ");
     next_button(5);
-     Previous();
+    Previous();
   }
 }
 
@@ -940,7 +951,7 @@ void lohumAlarm()
     lcd.print(_Custom.HLO);
     lcd.print(")%  ");
     next_button(6);
-     Previous();
+    Previous();
   }
 }
 
@@ -978,7 +989,7 @@ void turningSetting()
     }
 
     next_button(7);
-     Previous();
+    Previous();
   }
 }
 
@@ -994,7 +1005,7 @@ void cycle_time_setting() // setting cycle_time
     lcd.print(_Custom.PERIOD);
     lcd.print(")HOURS");
     next_button(8);
-     Previous();
+    Previous();
   }
   while (count == 7 && !_Custom.TURN)
   {
@@ -1032,7 +1043,7 @@ void turning_time_setting() // setting turning_time
     lcd.print(turning_time);
     lcd.print("Second");
     next_button(9);
-     Previous();
+    Previous();
   }
 }
 
@@ -1048,7 +1059,7 @@ void Hatching_setting()
     lcd.print(_Custom.HACHIN);
     lcd.print(")  ");
     next_button(10);
-      Previous();
+    Previous();
   }
 }
 
@@ -1066,7 +1077,7 @@ void Save_Panel()
     EEPROM.get(eeAddress, custom);
     delay(500);
     ///////////////
-    get_time();
+    Get_Time();
     periods[0] = RTC.second;
     periods[1] = RTC.minuts;
     periods[2] = RTC.hours;
@@ -1088,7 +1099,7 @@ void Save_Panel()
     lcd.print(" [SAVING DONE!] ");
     delay(1000);
     sw = 0;
-    lc1 = 0;
+    Setting_Mode = 0;
     count = 0;
     stable = 0;
     x = 0;
@@ -1096,6 +1107,340 @@ void Save_Panel()
     limit_dn = custom.TMPLO;
     alarm(2);
     lcd.clear();
+  }
+}
+
+void Heater_Controller()
+{
+  if (!Setting_Mode)
+  {
+    if ((area > 0.0) || (tmp_dwn < custom.SETTMP))
+    {
+      if (area > 1.5) //1.5 area = custom.SETTMP - tmp_dwn;
+      {
+        flag = 0;
+        digitalWrite(heater, HIGH);
+        heat_factor = 4.0; ///heat_factor = 4.0;
+      }
+      else
+      {
+        flag = 1;
+        heat_factor = 1.3;
+        digitalWrite(heater, Delay((area * 2000.0) + 1000.0)); /// Delay((area * 2000.0) + 1000.0));
+      }
+    }
+
+    if ((area <= 0.0) || ((tmp_up) > (custom.SETTMP + area + heat_factor))) ///0.85
+    {
+      flag = 0;
+      digitalWrite(heater, 0);
+    }
+
+    if (abs(area) < 0.01 && (!stable) && (alar_count == 0))
+    {
+      stable = 1;
+      alar_count = 1;
+      alarm(1);
+    }
+    if ((tmp_dwn >= custom.SETTMP - 0.1) & (tmp_dwn <= custom.SETTMP + 0.1)) // alarm  activate zone
+    {
+      alar_count = 0;
+    }
+  }
+  else
+  {
+    digitalWrite(heater, 0);
+  }
+}
+
+void Checking_Keys()
+{
+
+  //There is conflict with Rtc after 15 minuts because [i2c address of FD560 = i2c address of DS3231 ](on the same pins)
+
+  while ((red.get_key() == 0x7C) && !Setting_Mode) ///set key=7f on press,3f on relesed k1+k2(dual keys)(Setting manue)
+  {
+    zeroticks();
+    bool condition = 0;
+    while (red.get_key() == 0x7C)
+    {
+      if ((millis() - tick >= 1200))
+      {
+        condition = 1;
+        break;
+      }
+    }
+    while (!keystat && condition)
+    {
+      if (millis() - tick > 500)
+      {
+        zeroticks();
+        keystat = 1;
+        if ((red.get_key() == 0x7C) && !Setting_Mode)
+        {
+          manu_counter = millis();
+          Setting_Mode = 1;
+          digitalWrite(heater, 0);
+          hum_trig = 0;
+          sht31.Break();
+          memcpy((void *)&_Custom, (void *)&custom, sizeof(_Custom));
+          sw = 1;
+          lcd.clear();
+          count = 1;
+          alarm(1);
+        }
+      }
+    }
+    keystat = 0;
+  }
+}
+
+void Switching_between_Setting()
+{
+  switch (count)
+  {
+  case 1:
+    Set_temp();
+    break;
+  case 2:
+    hitmpAlarm();
+    break;
+  case 3:
+    lotmpAlarm();
+    break;
+  case 4:
+    hihumAlarm();
+    break;
+  case 5:
+    lohumAlarm();
+    break;
+  case 6:
+    turningSetting();
+    break;
+  case 7:
+    cycle_time_setting();
+    break;
+  case 8:
+    turning_time_setting();
+    break;
+  case 9:
+    Hatching_setting();
+    break;
+  case 10:
+    Save_Panel();
+    break;
+  default:
+    break;
+  }
+}
+
+uint8_t WHILE_NEXT(uint8_t v)
+{
+  uint8_t var = v;
+  while ((red.get_key() == 0x4C) && (millis() - tick > 200)) //next button
+  {
+    zeroticks();
+    lcd.clear();
+    var++;
+    alarm(1);
+  }
+  return var;
+}
+
+void EXIT()
+{
+  while ((red.get_key() == 0x47) && (millis() - tick > 150)) ///Exit
+  {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("EXIT WITHOU SAVE");
+    delay(500);
+    alarm(1);
+    zeroticks();
+    clock_manue = 0;
+    keystat = 1;
+  }
+}
+
+void Clock_setting()
+{
+  while ((red.get_key() == 0x7F) && !clock_manue) ///Clock setting....Buttom & left= 0x7F(pressed)
+  {
+    zeroticks();
+    bool condition = 0;
+    while (red.get_key() == 0x7F)
+    {
+      if ((millis() - tick >= 1200))
+      {
+        condition = 1;
+        break;
+      }
+    }
+    while (!keystat && condition)
+    {
+      if ((millis() - tick > 500))
+      {
+        zeroticks();
+        digitalWrite(heater, 0);
+        uint8_t subhour, submin, subsec, subyear, _year, submonth, subday;
+        subhour = RTC.hours;
+        submin = RTC.minuts;
+        subsec = RTC.second;
+        subyear = RTC.year - 2000;
+        _year = subyear;
+        submonth = RTC.month_inyear;
+        subday = RTC.day_inmonth;
+        lcd.clear();
+        alarm(1);
+        lcd.setCursor(2, 0);
+        lcd.print(" Set  Clock");
+        delay(1000);
+        lcd.clear();
+        clock_manue++;
+        while (clock_manue == 1) ///hours
+        {
+          lcd.setCursor(3, 0);
+          lcd.print("[H]: M : S");
+          lcd.setCursor(3, 1);
+          subhour = Plus_Minus(subhour, 23, 0);
+          if (subhour > 23)
+          {
+            subhour = 0;
+          }
+          lcd.print("[");
+          lcd.print(subhour);
+          lcd.print("]");
+          lcd.print(": ");
+          lcd.print(submin);
+          lcd.print(" :");
+          lcd.print(subsec);
+          clock_manue = WHILE_NEXT(clock_manue);
+          EXIT();
+        }
+        //////
+        while (clock_manue == 2) ///minuts
+        {
+          lcd.setCursor(3, 0);
+          lcd.print("H :[M]: S");
+          lcd.setCursor(3, 1);
+          submin = Plus_Minus(submin, 59, 0);
+          if (submin > 59)
+          {
+            submin = 0;
+          }
+          lcd.print(subhour);
+          lcd.print(" :");
+          lcd.print("[");
+          lcd.print(submin);
+          lcd.print("]");
+          lcd.print(":");
+          lcd.print(subsec);
+          clock_manue = WHILE_NEXT(clock_manue);
+          EXIT();
+        }
+        /////////
+        while (clock_manue == 3) ///seconds
+        {
+          lcd.setCursor(3, 0);
+          lcd.print("H : M :[S]");
+          lcd.setCursor(3, 1);
+          subsec = Plus_Minus(subsec, 59, 0);
+          if (subsec > 59)
+          {
+            subsec = 0;
+          }
+          lcd.print(subhour);
+          lcd.print(" : ");
+          lcd.print(submin);
+          lcd.print(":[");
+          lcd.print(subsec);
+          lcd.print("]");
+          while ((red.get_key() == 0x4C) && (millis() - tick > 200)) //next button
+          {
+            zeroticks();
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print(" [TIME UPDATED] ");
+            delay(500);
+            alarm(1);
+            lcd.clear();
+            clock_manue = 4;
+          }
+          EXIT();
+        }
+
+        while (clock_manue == 4) ///Year
+        {
+          lcd.setCursor(2, 0);
+          lcd.print("[YEAR]/ M / D");
+          lcd.setCursor(2, 1);
+          subyear = Plus_Minus(subyear, 50, _year);
+          if (subyear > 50)
+          {
+            subyear = 50;
+          }
+          lcd.print("[");
+          lcd.print(subyear + 2000);
+          lcd.print("]");
+          lcd.print("/");
+          lcd.print(submonth);
+          lcd.print("/");
+          lcd.print(subday);
+          clock_manue = WHILE_NEXT(clock_manue);
+          EXIT();
+        }
+
+        while (clock_manue == 5) ///Month
+        {
+          lcd.setCursor(3, 0);
+          lcd.print("Y / [M] / D");
+          lcd.setCursor(1, 1);
+          submonth = Plus_Minus(submonth, 12, 1);
+          if (submonth > 12)
+          {
+            submonth = 12;
+          }
+          lcd.print(subyear + 2000);
+          lcd.print("/ [");
+          lcd.print(submonth);
+          lcd.print("] / ");
+          lcd.print(subday);
+          clock_manue = WHILE_NEXT(clock_manue);
+          EXIT();
+        }
+
+        while (clock_manue == 6) ///Day
+        {
+          lcd.setCursor(3, 0);
+          lcd.print("Y / M /[D]");
+          lcd.setCursor(1, 1);
+          subday = Plus_Minus(subday, 31, 1);
+          if (subday > 31)
+          {
+            subday = 31;
+          }
+          lcd.print(subyear + 2000);
+          lcd.print("/ ");
+          lcd.print(submonth);
+          lcd.print(" /[");
+          lcd.print(subday);
+          lcd.print("]");
+          while ((red.get_key() == 0x4C) && (millis() - tick > 200)) //next button
+          {
+            zeroticks();
+            // DS3231.rtcWrite(subsec, submin,subhour, 0, 0, 1, subday, submonth, subyear);
+            lcd.clear();
+            lcd.print(" [SAVING DONE!] ");
+            delay(1000);
+            clock_manue = 0;
+            keystat = 1;
+            alarm(2);
+          }
+          EXIT();
+        }
+      }
+    }
+    keystat = 0;
   }
 }
 
@@ -1132,23 +1477,6 @@ void setup()
   green.clean();
   red.allOn_bri(2, 1);
   green.allOn_bri(1, 1);
-  //*************************
-  // Reading (setpoint) from EEPROM
-  // sp0 = eeprom.read(0x50, 0);
-  // sp0 *= 100;
-  // sp1 = eeprom.read(0x50, 1);
-  // setpoint = (sp1) + (sp0);
-  // setpoint /= 100;
-  //*******************
-  // Reading (Cycle time) fom turning motor from EEPROM
-  // cycle_time = eeprom.read(0x50, 2);
-  //*************************
-  // Reading (turning_time) from EEPROM
-  // sp0 = eeprom.read(0x50, 3);
-  // sp0 *= 100;
-  // sp1 = eeprom.read(0x50, 4);
-  // turning_time = (sp1) + (sp0);
-  // turning_time /= 100;
   //**************************************
   limit_up = custom.TMPHI;
   limit_dn = custom.TMPLO;
@@ -1167,7 +1495,7 @@ void setup()
   TCCR1B &= ~(1 << CS11);
   TCCR1B &= ~(1 << CS10);
   //////
-  TCNT1 = 0;       //start value
+  TCNT1 = 0;       //initial value
   OCR1A = t1_comp; ///compare value
   /////
   TIMSK1 = (1 << OCIE1A); ///Set the timer 1 interrupt bit enable
@@ -1178,181 +1506,18 @@ void setup()
 
 void loop()
 {
-
-  if ((area > 0.0) || (tmp_dwn < custom.SETTMP))
-  {
-    if (area > 1.5) //1.5 area = custom.SETTMP - tmp_dwn;
-    {
-      flag = 0;
-      digitalWrite(heater, HIGH);
-      heat_factor = 4.0; ///heat_factor = 4.0;
-    }
-    else
-    {
-      flag = 1;
-      heat_factor = 1.3;
-      digitalWrite(heater, Delay((area * 2000.0) + 1000.0)); /// Delay((area * 2000.0) + 1000.0));
-    }
-  }
-
-  if ((area <= 0.0) || ((tmp_up) > (custom.SETTMP + area + heat_factor))) ///0.85
-  {
-    flag = 0;
-    digitalWrite(heater, 0);
-  }
-
-  if (abs(area) < 0.01 && (!stable) && (alar_count == 0))
-  {
-    stable = 1;
-    alar_count = 1;
-    alarm(1);
-  }
-
-  if ((tmp_dwn >= custom.SETTMP - 0.1) & (tmp_dwn <= custom.SETTMP + 0.1)) // alarm  activate zone
-  {
-    alar_count = 0;
-  }
-  //there is conflict with Rtc after 15 minuts becuse [i2c address of FD560 = i2c address of DS3231 ](on the same pins)
-  while ((red.get_key() == 0x7C) && !lc1) ///set key=7f on press,3f on relesed k1+k2(dual keys)(Setting manue)
-  {
-    zeroticks();
-    while (!keystat)
-    {
-      if (millis() - tick > 500)
-      {
-        zeroticks();
-        keystat = 1;
-        if ((red.get_key() == 0x7C) && !lc1)
-        {
-          manu_counter = millis();
-          lc1 = 1;
-          digitalWrite(heater, 0);
-          hum_trig = 0;
-          sht31.Break();
-          memcpy((void *)&_Custom, (void *)&custom, sizeof(_Custom)); 
-          sw = 1;
-          lcd.clear();
-          count = 1;
-          alarm(1);
-        }
-      }
-    }
-    keystat = 0;
-  }
-
-  switch (count)
-  {
-  case 1:
-    Set_temp();
-    break;
-  case 2:
-    hitmpAlarm();
-    break;
-  case 3:
-    lotmpAlarm();
-    break;
-  case 4:
-    hihumAlarm();
-    break;
-  case 5:
-    lohumAlarm();
-    break;
-  case 6:
-    turningSetting();
-    break;
-  case 7:
-    cycle_time_setting();
-    break;
-  case 8:
-    turning_time_setting();
-    break;
-  case 9:
-    Hatching_setting();
-    break;
-  case 10:
-    Save_Panel();
-    break;
-  default:
-    break;
-  }
-
-  while ((red.get_key() == 0x7F) && !lc2) ///Clock setting
-  {
-    zeroticks();
-    while (!keystat)
-    {
-      if ((millis() - tick > 500))
-      {
-        zeroticks();
-        uint8_t subhour, submin, subsec;
-        subhour = RTC.hours;
-        submin = RTC.minuts;
-        subsec = RTC.second;
-        lcd.clear();
-        alarm(1);
-        lc2 = 1;
-        count = 0;
-        while (count == 0)
-        {
-          lcd.setCursor(0, 0);
-          lcd.print(" Clock Set");
-          lcd.setCursor(4, 1);
-          subhour = Plus_Minus(subhour, 23, 0);
-          if (subhour > 23)
-          {
-            subhour = 0;
-          }
-          lcd.print("[");
-          lcd.print(subhour);
-          lcd.print("]");
-          lcd.print(":");
-          lcd.print(submin);
-          lcd.print(":");
-          lcd.print(subsec);
-          next_button(1);
-        }
-        while (count == 1)
-        {
-          lcd.setCursor(0, 0);
-          lcd.print(" Clock Set");
-          lcd.setCursor(4, 1);
-          submin = Plus_Minus(submin, 59, 0);
-          if (submin > 59)
-          {
-            submin = 0;
-          }
-          lcd.print(subhour);
-          lcd.print(":");
-          lcd.print("[");
-          lcd.print(submin);
-          lcd.print("]");
-          lcd.print(":");
-          lcd.print(subsec);
-          // next_button(2);
-          while ((red.get_key() == 0x47) && (millis() - tick > 100) && lc2)
-          {
-            alarm(1);
-            lc2 = 0;
-          }
-        }
-      }
-    }
-    keystat = 0;
-  }
-
-  /////////////////////////////////
-  // while (bitRead(red.get_key(), 6) && !t) ///Bit 6 of the return byte is the status bit detecting if key is pressed or relesed
-  // {
-  //   Serial.print(String((red.get_key()), HEX) + "H | "); ///When key Pressed
-  //   t = 1;
-  // }
-
-  // while (!bitRead(red.get_key(), 6) && t)
-  // {
-  //   Serial.println(String((red.get_key()), HEX) + "H"); ///When key Relesed
-  //   t = 0;
-  // }
-
+  Humidity();
+  Heater_Controller();
+  Checking_Keys();
+  Switching_between_Setting();
+  Clock_setting();
+  Time_Remain();
+  Manual_Turn();
+  Display();
+  SevenSegmentDisplay();
+  Motor_Control();
+  // limit_warning();
+  Saving_data_Web();
   // if ((red.get_key() == 0x44)) ///Preview screen
   // {
   //   lcd.clear();
@@ -1360,33 +1525,18 @@ void loop()
   //   delay(4000);
   //   lcd.clear();
   // }
-
-  // manual_turn();
-
-  humidity();
-
-  display();
-
-  SevenSegmentdisplay();
-
-  start_motor();
-
-  // limit_warning();
-
-  Saving_data_Web();
 }
 
 ISR(TIMER1_COMPA_vect)
 {
   TCNT1 = 0;
   hum_trig++;
-  get_time();
-  Cycle();
-  update_data();
-  if ((millis() - manu_counter >= (180000)) && (lc1)) ///3 minuts
+  Get_Time();
+  Update_data();
+  if ((millis() - manu_counter >= (180000)) && (Setting_Mode)) ///3 minuts to return to main if no key pressed
   {
     manu_counter = millis();
-    lc1 = 0;
+    Setting_Mode = 0;
     stable = 0;
     x = 0;
     lcd.clear();

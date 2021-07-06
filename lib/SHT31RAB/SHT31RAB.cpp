@@ -130,6 +130,7 @@ void SHT31RAB::read(byte M_add, uint16_t command) ///Periodic Data Acquisition M
                             temp = -45.0 + (175.0 * float(tmp) / 65535.0);
                             tempResult = temp;
                             // Serial.print(temp); Serial.print(" | ");
+                           
                             break;
                         case 3:
                             hum += xnum;
@@ -140,6 +141,7 @@ void SHT31RAB::read(byte M_add, uint16_t command) ///Periodic Data Acquisition M
                             humidity = 100.0 * float(hum) / 65535.0;
                             humidityResult = humidity;
                             //  Serial.print(humidity); Serial.println(" ");
+                          
                             break;
                         default:
                             xnum = 0;
@@ -179,6 +181,7 @@ void SHT31RAB::read(byte M_add, uint16_t command) ///Periodic Data Acquisition M
     // Serial.print(" | ");
     // Serial.print(humidity);
     // Serial.println(" ");
+   
 }
 
 void SHT31RAB::Break()

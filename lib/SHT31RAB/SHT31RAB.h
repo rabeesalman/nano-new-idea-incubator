@@ -18,12 +18,14 @@ public:
     {
         da = datpin;
         cl = clpin;
+        
     }
     void read(byte Module_address, uint16_t commands); // 0x2130:  high repeatability mps - 2 measurements per second
     void Break();
     float tempResult;
     float humidityResult;
     ~SHT31RAB(){};
+    
 };
 
 #endif
