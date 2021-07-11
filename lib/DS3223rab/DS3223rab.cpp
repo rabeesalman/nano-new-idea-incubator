@@ -163,10 +163,9 @@ uint8_t DS3223rab::bcdtodec(const uint8_t val)
     return ((val / 16 * 10) + (val % 16));
 }
 
-byte *DS3223rab::rtcRead()
+uint8_t *DS3223rab::rtcRead()
 {
-    byte _rtc[7];
-    byte h = 0;
+    uint8_t h = 0;
     _rtc[0] = bcdtodec(read(DS3223_ADD, SECOND));
     _rtc[1] = bcdtodec(read(DS3223_ADD, MINUT));
     h = read(DS3223_ADD, HOUR);
@@ -192,10 +191,10 @@ byte *DS3223rab::rtcRead()
     _rtc[3] = bcdtodec(read(DS3223_ADD, DAY_IN_WEEK));
     _rtc[4] = bcdtodec(read(DS3223_ADD, DAY_IN_MONTH));
     _rtc[5] = bcdtodec(read(DS3223_ADD, MONTH_IN_YEAR) & 0b00011111);
-    _rtc[6] = bcdtodec(read(DS3223_ADD, YEAR)) + 2000;
     _rtc[6] = bcdtodec(read(DS3223_ADD, YEAR)) ;
-    memcpy(&result,&_rtc,sizeof(result));
-    return (result);
+    // memcpy(&result,&_rtc,sizeof(result));
+    // return (result);
+    return (_rtc);
 }
 
 void DS3223rab::rtcWrite(uint8_t S, uint8_t M, uint8_t H, bool _12_, bool pm, uint8_t dinwek, uint8_t dinmoth, uint8_t monthiny, uint16_t yer)

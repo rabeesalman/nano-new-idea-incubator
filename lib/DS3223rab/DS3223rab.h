@@ -23,7 +23,7 @@ private:
     void Byt_txrx(byte info);
     uint8_t dectobcd(const uint8_t val);
     uint8_t bcdtodec(const uint8_t val);
-    byte read(byte M_add, byte s_add);
+    uint8_t read(byte M_add, byte s_add);
     void write(byte M_add, byte s_add, byte data);
 
 public:
@@ -32,8 +32,8 @@ public:
         da = datpin;
         cl = clpin;
     }
-    byte result[7];
-    byte *rtcRead();
+    uint8_t _rtc[7];
+    uint8_t *rtcRead();
     void rtcWrite(uint8_t S, uint8_t M, uint8_t H, bool _12_, bool pm, uint8_t dinwek, uint8_t dinmoth, uint8_t monthiny, uint16_t yer);
     ~DS3223rab(){};
 };

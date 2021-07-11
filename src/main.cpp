@@ -71,7 +71,7 @@ uint8_t SEC = 0, MIN = 0, HOR = 0;
 unsigned long manu_counter = 3000;
 uint8_t periods[15] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; //[0]seconds,[1]minuts,[2]hours{instance of time now}
 
-struct data_tobe_send ////sending live data to esp8266(size 16 byte)
+struct data_tobe_send ////sending live data to esp8266(size 18 byte)
 {
   float TEMP;
   uint16_t year;
@@ -210,11 +210,24 @@ void Time_Remain()
     //********************************************************generic time
     for (uint8_t i = 3; i < (24 / custom.PERIOD) + 3; i++)
     {
-      if ((periods[i] - RTC.hours < custom.PERIOD) && (periods[i] - RTC.hours >= 0))
+      if (((periods[i] - RTC.hours) < custom.PERIOD) && (periods[i] - RTC.hours >= 0))
       {
         HOR = periods[i] - RTC.hours;
         MIN = periods[1] + (59 - periods[1]) - RTC.minuts;
         SEC = periods[0] + (59 - periods[0]) - RTC.second;
+        // uint8_t x = periods[0];
+        // uint8_t y = periods[1];
+        // MIN = y - RTC.minuts;
+        // SEC = x - RTC.second;
+        // if (SEC < 0)
+        // {
+        //   SEC += 59;
+        //   MIN--;
+        // }
+        // if (MIN < 0)
+        // {
+        //   MIN += 59;
+        // }
         if (HOR == 0 && MIN == 0 && SEC == 0 && !Motor_Signal)
         {
           turning_tone();
@@ -440,16 +453,6 @@ void Update_data()
   // tmp_up = stien_three(A1, 10000.0, 7.8786994030E-04, 2.8985556847E-04, -1.3697290359E-07); // Black wire epoxy 10k small baghdad
   // tmp_up = stien_three(A1, 10000.0, 1.3411013609E-03, 1.7326863945E-04, 5.1373528749E-07); ////white wire epoxy 10k baghdad (ok)
   tmp_up = stien_three(A1, 10000.0, 1.286986010E-03, 2.067415798E-04, 1.923761216E-07); ///first one epoxy 1500 dinar ok
-  //  if (hum_trig >= 1)
-  // {
-  //    sht31.read(SHT31_ADD, 0x2220);
-  //   m_temp = sht31.tempResult;
-  //   hum = sht31.humidityResult;
-  //   area = custom.SETTMP - m_temp;
-  //   //*************************************
-  //   hum_trig = 0;
-  // }
-  // area = custom.SETTMP - tmp_dwn;
   // data.TEMP = float(tmp_dwn);
   data.TEMP = m_temp;
   data.HUMI = int(hum);
@@ -1107,6 +1110,7 @@ void Save_Panel()
     limit_dn = custom.TMPLO;
     alarm(2);
     lcd.clear();
+   
   }
 }
 
@@ -1516,7 +1520,7 @@ void loop()
   Display();
   SevenSegmentDisplay();
   Motor_Control();
-  // limit_warning();
+  limit_warning();
   Saving_data_Web();
   // if ((red.get_key() == 0x44)) ///Preview screen
   // {
