@@ -1,0 +1,46 @@
+for (uint8_t i = 3; i < (24 / custom.PERIOD) + 3; i++)
+{
+  if (RTC.hours >= periods[i] && RTC.hours <= periods[i + 1])
+  {
+    HOR = RTC.hours - periods[i];
+    ii = i;
+  }
+}
+////////////
+periods[0] - RTC.second < 0 ? SEC = periods[0] - RTC.second + 60 : SEC = periods[0] - RTC.second;
+
+periods[1] - RTC.minuts < 0 ? MIN = periods[1] - RTC.minuts + 60 : MIN = periods[1] - RTC.minuts;
+
+uint8_t z = COUNTER + 1;
+
+if (z > (24 / custom.PERIOD) + 2)
+{
+  z = 3;
+}
+
+uint8_t next_Element = periods[z];
+
+next_Element - periods[COUNTER] < 0 ? next_Element += 24 : next_Element = periods[z];
+
+if (RTC.hours == periods[COUNTER] && RTC.hours <= next_Element)
+{
+  next_Element - RTC.hours - 1 < 0 ? HOR = 0 : HOR = next_Element - RTC.hours - 1;
+  ii = periods[COUNTER];
+  jj = periods[z];
+}
+
+else
+{
+  COUNTER++;
+}
+///////////////////////
+ // while (N_hour < RTC.hours)
+  // {
+  //   N_hour += custom.PERIOD;
+  //   N_hour > 23 ? N_hour -= 24 : N_hour = N_hour;
+  // }
+  // while (N_hour > RTC.hours )
+  // {
+  //   N_hour -= custom.PERIOD;
+  //   N_hour < 0 ? N_hour += 24 : N_hour = N_hour;
+  // }

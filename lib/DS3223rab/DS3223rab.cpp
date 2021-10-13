@@ -199,6 +199,7 @@ uint8_t *DS3223rab::rtcRead()
 
 void DS3223rab::rtcWrite(uint8_t S, uint8_t M, uint8_t H, bool _12_, bool pm, uint8_t dinwek, uint8_t dinmoth, uint8_t monthiny, uint16_t yer)
 {
+     uint8_t _year=0;
     write(DS3223_ADD, SECOND, dectobcd(S));
     write(DS3223_ADD, MINUT, dectobcd(M));
     if (_12_)
@@ -224,6 +225,6 @@ void DS3223rab::rtcWrite(uint8_t S, uint8_t M, uint8_t H, bool _12_, bool pm, ui
     write(DS3223_ADD, DAY_IN_WEEK, dectobcd(dinwek));
     write(DS3223_ADD, DAY_IN_MONTH, dectobcd(dinmoth));
     write(DS3223_ADD, MONTH_IN_YEAR, dectobcd(monthiny & 0b00011111));
-    yer < 2000 ? yer = 2000 : yer = yer - 2000;
-    write(DS3223_ADD, YEAR, dectobcd(yer));
+    yer <= 2000 ?  _year = 0 :  _year = yer - 2000;
+    write(DS3223_ADD, YEAR, dectobcd(_year));
 }

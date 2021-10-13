@@ -1,9 +1,9 @@
 //pinout...
 //lcdi2c 5,6  red8,9;green11,10;heater 12,motor 13,buz A2,DHT22_data_pin A3
 /*
-  top =   0x44(pressed)....0x04(relesed)[ ++]
+  Up =   0x44(pressed)....0x04(relesed)[ ++]
   right = 0x4C(pressed)....0x0C(relesed) [Next]
-  buttom= 0x4F(pressed)....0x0F(relesed) [--]
+  Down= 0x4F(pressed)....0x0F(relesed) [--]
   left=   0x47(pressed)....0x07(relesed)
   top&right=   0x7C(pressed)....0x3C(relesed) [Setting Manue]
   buttom&left= 0x7F(pressed)....0x07(relesed) [Clock Manue]
@@ -67,10 +67,10 @@ unsigned long sig = 0;
 bool pm = 0;
 unsigned long turnTimeCounter = 0;
 bool Motor_Signal = 0;
-uint8_t SEC = 0, MIN = 0, HOR = 0;
+int SEC, MIN, HOR;
 unsigned long manu_counter = 3000;
-uint8_t periods[15] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; //[0]seconds,[1]minuts,[2]hours{instance of time now}
-
+uint8_t periods[3] = {0, 0, 0}; //[0]seconds,[1]minuts,[2]hours{instance of time now}
+uint8_t ii, jj = 0;
 struct data_tobe_send ////sending live data to esp8266(size 18 byte)
 {
   float TEMP;
@@ -207,34 +207,40 @@ void Time_Remain()
 {
   if (custom.TURN)
   {
-    //********************************************************generic time
-    for (uint8_t i = 3; i < (24 / custom.PERIOD) + 3; i++)
+    int spoofedRTC = RTC.hours;
+    if (spoofedRTC < periods[2])
+      spoofedRTC += 24;
+    int eTime = (spoofedRTC - periods[2]) % custom.PERIOD;
+    jj = eTime;
+    int rTime = 0;
+    if ((RTC.minuts > periods[1] || (RTC.second > periods[0] && RTC.minuts == periods[1])) || eTime != 0)
     {
-      if (((periods[i] - RTC.hours) < custom.PERIOD) && (periods[i] - RTC.hours >= 0))
-      {
-        HOR = periods[i] - RTC.hours;
-        MIN = periods[1] + (59 - periods[1]) - RTC.minuts;
-        SEC = periods[0] + (59 - periods[0]) - RTC.second;
-        // uint8_t x = periods[0];
-        // uint8_t y = periods[1];
-        // MIN = y - RTC.minuts;
-        // SEC = x - RTC.second;
-        // if (SEC < 0)
-        // {
-        //   SEC += 59;
-        //   MIN--;
-        // }
-        // if (MIN < 0)
-        // {
-        //   MIN += 59;
-        // }
-        if (HOR == 0 && MIN == 0 && SEC == 0 && !Motor_Signal)
-        {
-          turning_tone();
-          turnTimeCounter = millis();
-          Motor_Signal = 1;
-        }
-      }
+      rTime = custom.PERIOD - eTime;
+    }
+
+    HOR = rTime;
+    SEC = periods[0] - RTC.second;
+    MIN = periods[1] - RTC.minuts;
+    if (SEC < 0)
+    {
+      SEC += 60;
+      MIN--;
+    }
+    if (MIN < 0)
+    {
+      MIN += 60;
+      HOR--;
+    }
+    if (HOR < 0)
+    {
+      HOR += custom.PERIOD;
+    }
+
+    if (SEC == 0 && MIN == 0 && HOR == 0 && !Motor_Signal)
+    {
+      turning_tone();
+      turnTimeCounter = millis();
+      Motor_Signal = 1;
     }
   }
   else
@@ -274,36 +280,6 @@ void Saving_data_Web()
     eeAddress = sizeof(float) + sizeof(data_to_save);
     EEPROM.put(eeAddress, periods);
     EEPROM.get(eeAddress, periods);
-    // for (uint8_t i = 0; i < sizeof(periods); i++)
-    // {
-    //   Serial.print(periods[i]);
-    //   Serial.print(" | ");
-    // }
-    // Serial.println("");
-
-    // float *p1;
-    // // take address of custom and assign to the pointer
-    // p1 = (float *)&custom;
-    // // loop thorugh the elements of the struct
-    // for (uint8_t cnt = 0; cnt < 3; cnt++)
-    // {
-    //   // p points to an address of an element in the array; *p gets you the value ofthat address
-    //   // print it and next point the pointer to the address of the next element
-    //   Serial.print(*(p1++));
-    //   Serial.print(" | ");
-    // }
-    // uint8_t *p;
-    // // take address of custom and assign to the pointer
-    // p = (uint8_t *)&custom;
-    // p += 12;
-    // // p++;
-
-    // for (uint8_t cnt = 10; cnt < sizeof(custom) / sizeof(uint8_t); cnt++)
-    // {
-    //   Serial.print(*(p++));
-    //   Serial.print(" | ");
-    // }
-    // Serial.println("  ");
   }
 }
 
@@ -317,7 +293,6 @@ void on_Request() ///on Request do this
   case 'd':
     Wire.write((byte *)(&data), sizeof(data));
     break;
-
   case 's':
     // Wire.write((byte *)(&custom), sizeof(custom));
     break;
@@ -330,7 +305,6 @@ void receiveEvent(int howMany)
 {
   if (Wire.available() > 0)
   {
-
     for (unsigned int i = 0; i < sizeof(arryx); i++)
     {
       arryx[i] = Wire.read();
@@ -436,9 +410,11 @@ void Humidity()
     // hum = (databytes[0] * 256 + databytes[1]) / (float)10; //Extract Humidity
     // hum *= 100.0;
     //**********************************
-    sht31.read(SHT31_ADD, 0x2220);
-    m_temp = sht31.tempResult;
-    hum = sht31.humidityResult;
+    // sht31.read(SHT31_ADD, 0x2220);
+    // m_temp = sht31.tempResult;
+    m_temp = 22;
+    // hum = sht31.humidityResult;
+    hum = 33;
     area = custom.SETTMP - m_temp;
     //*************************************
     hum_trig = 0;
@@ -572,6 +548,7 @@ void Manual_Turn()
     zeroticks();
     while ((red.get_key() == 0x47) && !lc2) //left key=0x47H
     {
+
       if ((millis() - tick > 100))
       {
         zeroticks();
@@ -616,14 +593,23 @@ void Display()
   if (!sw)
   {
     lcd.setCursor(0, 0);
-    lcd.print("TP=");
-    if (tmp_up <= -20)
-    {
-      lcd.print("OPEN");
-    }
-    else
-      lcd.print(tmp_up);
+    // lcd.print("TP=");
+    // if (tmp_up <= -20)
+    // {
+    //   lcd.print("OPEN");
+    // }
+    // else
+    // lcd.print(tmp_up);
+    // lcd.print("/");
+    /////////
+    // lcd.print(RTC.year);
+    // lcd.print("/");
+    lcd.print(periods[2]);
+    lcd.print(periods[1]);
+    lcd.print(":");
+    lcd.print(periods[0]);
     lcd.print("/");
+    //////////////
     lcd.print(RTC.hours);
     lcd.print(":");
     lcd.print(RTC.minuts);
@@ -637,20 +623,19 @@ void Display()
       lcd.print(RTC.second);
     }
     lcd.setCursor(0, 1);
-    lcd.print("BN=");
+    // lcd.print("BN=");
     if (m_temp <= -10)
     {
-      lcd.print("OPEN");
+      // lcd.print("OPEN");
     }
     else if (custom.TURN)
     {
-      lcd.print(m_temp);
-      lcd.print("/");
+      // lcd.print(m_temp);
+      // lcd.print("/");
       lcd.print(HOR);
       lcd.print(":");
       lcd.print(MIN);
       lcd.print(":");
-      lcd.print(SEC);
       if (SEC == 0)
       {
         lcd.print("0   ");
@@ -658,11 +643,15 @@ void Display()
       else
       {
         lcd.print(SEC);
+        lcd.print("i.j");
+        lcd.print(custom.PERIOD);
+        lcd.print(",");
+        lcd.print(jj);
       }
     }
     else
     {
-      lcd.print(m_temp);
+      // lcd.print(m_temp);
       lcd.print("/");
       lcd.print("STOPED!");
     }
@@ -1084,14 +1073,7 @@ void Save_Panel()
     periods[0] = RTC.second;
     periods[1] = RTC.minuts;
     periods[2] = RTC.hours;
-    for (uint8_t i = 3; i < (24 / custom.PERIOD) + 3; i++)
-    {
-      periods[i] = periods[i - 1] + custom.PERIOD;
-      if (periods[i] > 23)
-      {
-        periods[i] = periods[i] - 24;
-      }
-    }
+
     eeAddress = sizeof(float) + sizeof(data_to_save);
     EEPROM.put(eeAddress, periods);
     delay(500);
@@ -1110,7 +1092,7 @@ void Save_Panel()
     limit_dn = custom.TMPLO;
     alarm(2);
     lcd.clear();
-   
+    delay(1000);
   }
 }
 
@@ -1159,9 +1141,6 @@ void Heater_Controller()
 
 void Checking_Keys()
 {
-
-  //There is conflict with Rtc after 15 minuts because [i2c address of FD560 = i2c address of DS3231 ](on the same pins)
-
   while ((red.get_key() == 0x7C) && !Setting_Mode) ///set key=7f on press,3f on relesed k1+k2(dual keys)(Setting manue)
   {
     zeroticks();
@@ -1261,6 +1240,7 @@ void EXIT()
     delay(500);
     alarm(1);
     zeroticks();
+    lcd.clear();
     clock_manue = 0;
     keystat = 1;
   }
@@ -1286,12 +1266,11 @@ void Clock_setting()
       {
         zeroticks();
         digitalWrite(heater, 0);
-        uint8_t subhour, submin, subsec, subyear, _year, submonth, subday;
+        uint8_t subhour, submin, subsec, subyear, submonth, subday;
         subhour = RTC.hours;
         submin = RTC.minuts;
         subsec = RTC.second;
         subyear = RTC.year - 2000;
-        _year = subyear;
         submonth = RTC.month_inyear;
         subday = RTC.day_inmonth;
         lcd.clear();
@@ -1378,7 +1357,7 @@ void Clock_setting()
           lcd.setCursor(2, 0);
           lcd.print("[YEAR]/ M / D");
           lcd.setCursor(2, 1);
-          subyear = Plus_Minus(subyear, 50, _year);
+          subyear = Plus_Minus(subyear, 50, 21);
           if (subyear > 50)
           {
             subyear = 50;
@@ -1432,10 +1411,11 @@ void Clock_setting()
           while ((red.get_key() == 0x4C) && (millis() - tick > 200)) //next button
           {
             zeroticks();
-            // DS3231.rtcWrite(subsec, submin,subhour, 0, 0, 1, subday, submonth, subyear);
+            DS3231.rtcWrite(subsec, submin, subhour, 0, 0, 1, subday, submonth, subyear + 2000); //24 hours system
             lcd.clear();
             lcd.print(" [SAVING DONE!] ");
             delay(1000);
+            lcd.clear();
             clock_manue = 0;
             keystat = 1;
             alarm(2);
@@ -1453,7 +1433,7 @@ void setup()
   // rtcWrite(30, 43, 8, 0, 0, 1, 22, 5, 2021);
   lcd.init();
   lcd.backlight();
-  // Serial.begin(9600);
+  Serial.begin(9600);
   EEPROM.begin();
   //////////////////////////
   // eeAddress += sizeof(float);
@@ -1461,14 +1441,10 @@ void setup()
   /////////////////////////////////////////////
   eeAddress = sizeof(float);
   EEPROM.get(eeAddress, custom);
-  for (uint8_t i = 0; i < sizeof(periods); i++)
-  {
-    periods[i] = 0;
-  }
   eeAddress = sizeof(float) + sizeof(data_to_save);
-  delay(200);
+  delay(50);
   EEPROM.get(eeAddress, periods);
-  delay(200);
+  delay(50);
   Wire.begin(8);
   Wire.onReceive(receiveEvent);
   Wire.onRequest(on_Request);
@@ -1513,15 +1489,23 @@ void loop()
   Humidity();
   Heater_Controller();
   Checking_Keys();
+  Time_Remain();
   Switching_between_Setting();
   Clock_setting();
-  Time_Remain();
   Manual_Turn();
   Display();
   SevenSegmentDisplay();
   Motor_Control();
-  limit_warning();
+  // limit_warning();
   Saving_data_Web();
+  if ((red.get_key() == 0x44)) ///Preview screen
+  {
+    for (byte i = 0; i < (24 / custom.PERIOD) + 3; i++)
+    {
+      Serial.print(periods[i]);
+      Serial.print("|");
+    }
+  }
   // if ((red.get_key() == 0x44)) ///Preview screen
   // {
   //   lcd.clear();
@@ -1537,7 +1521,7 @@ ISR(TIMER1_COMPA_vect)
   hum_trig++;
   Get_Time();
   Update_data();
-  if ((millis() - manu_counter >= (180000)) && (Setting_Mode)) ///3 minuts to return to main if no key pressed
+  if ((millis() - manu_counter >= (40000)) && (Setting_Mode)) ///1 minuts to return to main if no key pressed
   {
     manu_counter = millis();
     Setting_Mode = 0;
